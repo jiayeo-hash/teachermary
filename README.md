@@ -1,8 +1,8 @@
 # Teacher Mary mockup
 
 A clickable mockup of a website where every class gets its own "room":
-the teacher shares one link, students find the weekly reading and hand in
-homework there, and the teacher watches or reads it in the browser.
+the teacher shares a link for each lesson, students pick their name, find that
+lesson's reading and hand in homework there, and the teacher watches or reads it in the browser.
 
 It is a plain static site. No build step, no dependencies, nothing is saved or
 uploaded yet (names and files are made up).

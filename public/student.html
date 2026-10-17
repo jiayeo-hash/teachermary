@@ -63,6 +63,25 @@ body{margin:0;font-family:'Nunito',sans-serif;color:#23284A;background:#FFF9EE}
 </div>
 </header>
 
+<sc-if value="{{picker}}" hint-placeholder-val="{{ false }}">
+<main style="width: 100%; max-width: 760px; margin: 0 auto; box-sizing: border-box; padding: 28px 16px 56px; display: flex; flex-direction: column; align-items: center; gap: 28px; text-align: center">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<h1 style="margin: 0; font-family: 'Fredoka', sans-serif; font-weight: 700; font-size: 36px; line-height: 1.1">Who is handing in?</h1>
+<span style="font-size: 18px; color: #5B5F85">Tap your picture to open {{lessonName}}.</span>
+</div>
+<div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 22px 18px; width: 100%">
+<sc-for list="{{people}}" as="s" hint-placeholder-count="6">
+<button onClick="{{s.pick}}" style="flex: none; width: 128px; min-height: 44px; padding: 0; border: 0; background: transparent; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 10px; font-family: 'Fredoka', sans-serif; font-weight: 600; font-size: 18px; color: #23284A">
+<span style="width: 108px; height: 108px; border-radius: 28px; background: {{s.bg}}; display: flex; align-items: center; justify-content: center; font-size: 42px; font-weight: 700; box-shadow: 0 6px 0 rgba(35,40,74,0.16)">{{s.initials}}</span>
+{{s.name}}
+</button>
+</sc-for>
+</div>
+<span style="font-size: 14px; color: #5B5F85; max-width: 420px; line-height: 1.5">Only friends in Class A see this page. Your teacher can use a photo or a drawing for each friend.</span>
+</main>
+</sc-if>
+
+<sc-if value="{{hasWho}}" hint-placeholder-val="{{ true }}">
 <main style="width: 100%; max-width: 1100px; margin: 0 auto; box-sizing: border-box; padding: 20px 16px 48px; display: flex; flex-direction: column; gap: 24px">
 
 <nav aria-label="Weeks" style="display: flex; flex-wrap: wrap; gap: 10px">
@@ -89,8 +108,8 @@ body{margin:0;font-family:'Nunito',sans-serif;color:#23284A;background:#FFF9EE}
 <h1 style="margin: 0; font-family: 'Fredoka', sans-serif; font-weight: 700; font-size: 32px; line-height: 1.1">{{cur.title}}</h1>
 </div>
 <div style="max-width: 520px; display: flex; align-items: center; justify-content: space-between; gap: 12px; background: #FFFFFF; border: 2px solid #EBDDBD; border-radius: 22px; padding: 6px 6px 6px 18px">
-<span style="font-size: 16px; color: #5B5F85">Handing in as <b style="color: #23284A">Linh T.</b></span>
-<button style="min-height: 48px; padding: 0 16px; border: 0; border-radius: 16px; background: #E3EDFF; color: #2F6FED; font-family: 'Fredoka', sans-serif; font-weight: 600; font-size: 16px; cursor: pointer">Not you?</button>
+<span style="font-size: 16px; color: #5B5F85">Handing in as <b style="color: #23284A">{{who.name}}</b></span>
+<button onClick="{{switchWho}}" style="min-height: 48px; padding: 0 16px; border: 0; border-radius: 16px; background: #E3EDFF; color: #2F6FED; font-family: 'Fredoka', sans-serif; font-weight: 600; font-size: 16px; cursor: pointer">Not you?</button>
 </div>
 </div>
 
@@ -163,7 +182,7 @@ Download
 <button onClick="{{startChange}}" style="min-height: 48px; padding: 0 20px; border: 2px solid #1B8350; border-radius: 16px; background: #FFFFFF; color: #1B8350; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 16px; cursor: pointer">Change file</button>
 <button onClick="{{askDelete}}" style="min-height: 48px; padding: 0 20px; border: 2px solid #E3B4B4; border-radius: 16px; background: #FFFFFF; color: #B3261E; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 16px; cursor: pointer">Delete</button>
 </div>
-<span style="font-size: 13px; color: #3C5A49; line-height: 1.5">You can change or delete it until this week closes.</span>
+<span style="font-size: 13px; color: #3C5A49; line-height: 1.5">You can change or delete it until this lesson closes.</span>
 </sc-if>
 <sc-if value="{{cur.isConfirming}}" hint-placeholder-val="{{ false }}">
 <div style="background: #FFFFFF; border: 2px solid #E3B4B4; border-radius: 18px; padding: 14px; display: flex; flex-direction: column; gap: 10px">
@@ -204,13 +223,14 @@ Download
 </div>
 <div style="display: flex; align-items: center; gap: 10px; font-size: 14px; color: #5B5F85; line-height: 1.5">
 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5B5F85" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
-Only friends in Class A can see this room.
+Only friends in Class A can see this lesson.
 </div>
 </section>
 
 </div>
 
 </main>
+</sc-if>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1700}}'>
@@ -218,14 +238,23 @@ class Component extends DCLogic {
   renderVals() {
     const st = this.state || {};
     const picked = st.week || 'w6';
-    const mine = st.mine || 'in';
+    const people = [
+      ['linh','Linh T.','LT'],['minh','Minh A.','MA'],['an','An P.','AP'],['khoa','Khoa N.','KN'],['mai','Mai D.','MD'],
+      ['ha','Hà P.','HP'],['bao','Bảo L.','BL'],['chi','Chi V.','CV'],['dung','Dũng H.','DH']
+    ].map((p, i) => ({
+      id: p[0], name: p[1], initials: p[2],
+      bg: ['#FFE3E3', '#CFE9FF', '#E0F5E9', '#E8E0FF', '#FFF0C2'][i % 5],
+      pick: () => this.setState({ who: p[0], mine: null, newFile: null, week: 'w6' })
+    }));
+    const who = people.find((p) => p.id === st.who) || null;
+    const mine = st.mine || (who && who.id === 'linh' ? 'in' : 'none');
     const tints = ['#FFE3E3', '#E0F5E9', '#E8E0FF', '#FFF0C2'];
     const data = [
       {
-        id: 'w6', label: 'Week 6', isCurrent: true,
+        id: 'w6', label: 'Mon 19 Oct', isCurrent: true,
         material: [
-          { file: 'Week 6 reading.pdf', meta: 'PDF · 1.2 MB' },
-          { file: 'Week 6 worksheet.pdf', meta: 'PDF · 0.8 MB' }
+          { file: 'Lesson 12 reading.pdf', meta: 'PDF · 1.2 MB' },
+          { file: 'Lesson 12 worksheet.pdf', meta: 'PDF · 0.8 MB' }
         ],
         myFile: 'speaking-week6.mp4', myWhen: '2 minutes ago',
         mates: [
@@ -236,10 +265,10 @@ class Component extends DCLogic {
         ]
       },
       {
-        id: 'w5', label: 'Week 5', isCurrent: false,
+        id: 'w5', label: 'Wed 14 Oct', isCurrent: false,
         material: [
-          { file: 'Week 5 reading.pdf', meta: 'PDF · 1.0 MB' },
-          { file: 'Week 5 worksheet.pdf', meta: 'PDF · 0.7 MB' }
+          { file: 'Lesson 11 reading.pdf', meta: 'PDF · 1.0 MB' },
+          { file: 'Lesson 11 worksheet.pdf', meta: 'PDF · 0.7 MB' }
         ],
         myFile: 'speaking-week5.mp4', myWhen: 'last Wednesday',
         mates: [
@@ -249,9 +278,9 @@ class Component extends DCLogic {
         ]
       },
       {
-        id: 'w4', label: 'Week 4', isCurrent: false,
+        id: 'w4', label: 'Mon 12 Oct', isCurrent: false,
         material: [
-          { file: 'Week 4 reading.pdf', meta: 'PDF · 0.9 MB' }
+          { file: 'Lesson 10 reading.pdf', meta: 'PDF · 0.9 MB' }
         ],
         myFile: 'speaking-week4.mp4', myWhen: '2 weeks ago',
         mates: [
@@ -263,7 +292,7 @@ class Component extends DCLogic {
     const weeks = data.map((w) => {
       const on = w.id === picked;
       return {
-        label: w.isCurrent ? w.label + ' · now' : w.label,
+        label: w.isCurrent ? w.label + ' · this lesson' : w.label,
         bg: on ? '#FFC93C' : '#FFFFFF',
         fg: '#23284A',
         bd: on ? '#D9A400' : '#EBDDBD',
@@ -283,10 +312,12 @@ class Component extends DCLogic {
       showCard: !isCur || mine === 'in' || mine === 'confirm',
       showActions: isCur && mine === 'in',
       isConfirming: isCur && mine === 'confirm',
-      title: found.isCurrent ? 'Hi Linh! Here is this week' : 'Looking back at ' + found.label
+      title: found.isCurrent ? 'Hi ' + (who ? who.name.split(' ')[0] : '') + '! Here is this lesson' : 'Looking back at ' + found.label
     };
     const mates = found.mates.map((m, i) => ({ ...m, bg: tints[i % tints.length] }));
     return {
+      people, who, picker: !who, hasWho: !!who, lessonName: 'Mon 19 Oct',
+      switchWho: () => this.setState({ who: null, mine: null, newFile: null }),
       weeks, cur, material: found.material, mates,
       choose: () => this.setState({ mine: 'in', newFile: 'my-new-video.mp4' }),
       keepOld: () => this.setState({ mine: 'in' }),
