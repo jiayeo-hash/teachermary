@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
-body{margin:0;font-family:'Nunito',sans-serif;color:#23284A;background:#F5EBD3}
+body{margin:0;font-family:'Nunito',sans-serif;color:#23284A;background:#FFF9EE}
 </style>
 <style>x-dc{display:block}x-dc:not([data-ready]){visibility:hidden}</style>
 <script src="dc-lite.js" defer></script>
@@ -20,12 +20,15 @@ body{margin:0;font-family:'Nunito',sans-serif;color:#23284A;background:#F5EBD3}
 </div>
 <x-dc>
 
-<div style="min-height: 100vh; max-width: 430px; margin: 0 auto; box-sizing: border-box; box-shadow: 0 0 40px rgba(35,40,74,0.12); display: flex; flex-direction: column; background: #FFF9EE; font-family: 'Nunito', sans-serif; color: #23284A">
+<div style="min-height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; background: #FFF9EE; font-family: 'Nunito', sans-serif; color: #23284A">
 
-<header style="background: #2F6FED">
-<svg viewBox="0 0 390 210" role="img" aria-label="Welcome to Class A" style="display: block; width: 100%; height: auto">
+<header style="overflow: hidden; background: #2F6FED">
+<div style="max-width: 560px; margin: 0 auto">
+<svg viewBox="0 0 390 210" role="img" aria-label="Welcome to Class A" style="display: block; width: 100%; height: auto; overflow: visible">
 <g fill="#FFFFFF" fill-opacity="0.22"><circle cx="290" cy="22" r="12"/><circle cx="308" cy="16" r="16"/><circle cx="332" cy="24" r="11"/><rect x="290" y="22" width="53" height="13" rx="6.5"/></g>
-<path d="M0 0" fill="none"/>
+<g fill="#FFFFFF" fill-opacity="0.16"><circle cx="-70" cy="44" r="14"/><circle cx="-50" cy="36" r="18"/><circle cx="-24" cy="46" r="12"/><rect x="-70" y="44" width="58" height="14" rx="7"/></g>
+<g fill="#FFFFFF" fill-opacity="0.16"><circle cx="450" cy="70" r="12"/><circle cx="468" cy="62" r="16"/><circle cx="492" cy="72" r="11"/><rect x="450" y="70" width="53" height="13" rx="6.5"/></g>
+<g fill="#FFFFFF" fill-opacity="0.12"><circle cx="-190" cy="90" r="12"/><circle cx="-172" cy="82" r="16"/><circle cx="-148" cy="92" r="11"/><rect x="-190" y="90" width="53" height="13" rx="6.5"/></g>
 <g fill="#FFC93C"><path transform="translate(266 52) scale(0.8)" d="M12 2l2.9 6.3 6.9.8-5.1 4.7 1.4 6.8L12 17.8 5.9 20.6l1.4-6.8L2.2 9.1l6.9-.8z"/><path transform="translate(366 48) scale(0.7)" d="M12 2l2.9 6.3 6.9.8-5.1 4.7 1.4 6.8L12 17.8 5.9 20.6l1.4-6.8L2.2 9.1l6.9-.8z"/></g>
 <rect x="22" y="26" width="232" height="136" rx="14" fill="#B9824A"/>
 <rect x="32" y="36" width="212" height="112" rx="8" fill="#2E4A43"/>
@@ -34,8 +37,8 @@ body{margin:0;font-family:'Nunito',sans-serif;color:#23284A;background:#F5EBD3}
 <rect x="210" y="144" width="10" height="4" rx="2" fill="#FFB3C1"/>
 <path d="M48 128 q14 -9 28 0 t28 0 t28 0 t28 0 t28 0" fill="none" stroke="#FFC93C" stroke-width="3" stroke-linecap="round"/>
 <g transform="translate(212 44) scale(0.9)" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linejoin="round"><path d="M12 2l2.9 6.3 6.9.8-5.1 4.7 1.4 6.8L12 17.8 5.9 20.6l1.4-6.8L2.2 9.1l6.9-.8z"/></g>
-<rect x="0" y="186" width="390" height="24" fill="#D9A15B"/>
-<rect x="0" y="186" width="390" height="5" fill="#B9824A"/>
+<rect x="-1500" y="186" width="3390" height="24" fill="#D9A15B"/>
+<rect x="-1500" y="186" width="3390" height="5" fill="#B9824A"/>
 <ellipse cx="282" cy="150" rx="12" ry="28" fill="#8B5A2B" transform="rotate(8 282 150)"/>
 <ellipse cx="366" cy="150" rx="12" ry="28" fill="#8B5A2B" transform="rotate(-8 366 150)"/>
 <ellipse cx="324" cy="140" rx="42" ry="46" fill="#A9703A"/>
@@ -57,15 +60,16 @@ body{margin:0;font-family:'Nunito',sans-serif;color:#23284A;background:#F5EBD3}
 <text x="48" y="64" font-family="Fredoka, sans-serif" font-weight="500" font-size="16" fill="#CFE0FF">Welcome to</text>
 <text x="48" y="110" font-family="Fredoka, sans-serif" font-weight="700" font-size="46" fill="#FFFFFF">Class A</text>
 </svg>
+</div>
 </header>
 
-<nav aria-label="Weeks" style="display: flex; gap: 10px; overflow-x: auto; padding: 18px 16px 10px">
+<main style="width: 100%; max-width: 1100px; margin: 0 auto; box-sizing: border-box; padding: 20px 16px 48px; display: flex; flex-direction: column; gap: 24px">
+
+<nav aria-label="Weeks" style="display: flex; flex-wrap: wrap; gap: 10px">
 <sc-for list="{{weeks}}" as="w" hint-placeholder-count="3">
 <button onClick="{{w.pick}}" style="flex: none; min-height: 52px; padding: 0 22px; border-radius: 99px; font-family: 'Fredoka', sans-serif; font-weight: 600; font-size: 18px; cursor: pointer; color: {{w.fg}}; background: {{w.bg}}; border: 2px solid {{w.bd}}; box-shadow: 0 4px 0 {{w.sh}}">{{w.label}}</button>
 </sc-for>
 </nav>
-
-<main style="padding: 14px 16px 40px; display: flex; flex-direction: column; gap: 28px">
 
 <div style="display: flex; flex-direction: column; gap: 12px">
 <div style="display: flex; align-items: center; gap: 12px">
@@ -84,11 +88,15 @@ body{margin:0;font-family:'Nunito',sans-serif;color:#23284A;background:#F5EBD3}
 </svg>
 <h1 style="margin: 0; font-family: 'Fredoka', sans-serif; font-weight: 700; font-size: 32px; line-height: 1.1">{{cur.title}}</h1>
 </div>
-<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; background: #FFFFFF; border: 2px solid #EBDDBD; border-radius: 22px; padding: 6px 6px 6px 18px">
+<div style="max-width: 520px; display: flex; align-items: center; justify-content: space-between; gap: 12px; background: #FFFFFF; border: 2px solid #EBDDBD; border-radius: 22px; padding: 6px 6px 6px 18px">
 <span style="font-size: 16px; color: #5B5F85">Handing in as <b style="color: #23284A">Linh T.</b></span>
 <button style="min-height: 48px; padding: 0 16px; border: 0; border-radius: 16px; background: #E3EDFF; color: #2F6FED; font-family: 'Fredoka', sans-serif; font-weight: 600; font-size: 16px; cursor: pointer">Not you?</button>
 </div>
 </div>
+
+<div style="display: flex; flex-wrap: wrap; align-items: flex-start; gap: 28px">
+
+<div style="flex: 1 1 340px; min-width: 0; display: flex; flex-direction: column; gap: 28px">
 
 <section style="display: flex; flex-direction: column; gap: 14px">
 <div style="display: flex; align-items: center; gap: 12px">
@@ -147,7 +155,9 @@ Download
 </div>
 </section>
 
-<section style="display: flex; flex-direction: column; gap: 14px">
+</div>
+
+<section style="flex: 1 1 340px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
 <div style="display: flex; align-items: center; gap: 12px">
 <div style="width: 48px; height: 48px; flex: none; border-radius: 16px; background: #B49CF7; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 0 #8368D6">
 <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#23284A" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><circle cx="17" cy="9.5" r="2.5"/><path d="M3 20a6 6 0 0 1 12 0M15 15.5a5 5 0 0 1 6 4.5"/></svg>
@@ -174,6 +184,8 @@ Download
 Only friends in Class A can see this room.
 </div>
 </section>
+
+</div>
 
 </main>
 </div>

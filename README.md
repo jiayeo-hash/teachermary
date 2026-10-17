@@ -14,7 +14,7 @@ public/
   index.html      start page with links to the three views
   dashboard.html  teacher: your classes
   room.html       teacher: review homework inside a class room
-  student.html    student: the room on a phone
+  student.html    student: the room (phone, iPad and computer)
   dc-lite.js      small helper that draws the pages (no build needed)
   robots.txt      asks search engines not to list the site
 ```
