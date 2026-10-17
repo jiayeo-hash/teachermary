@@ -3,8 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev --local",
-    "test": "node test/api.test.mjs"
+    "dev": "wrangler dev --local --test-scheduled",
+    "test": "node test/unit.test.mjs && node test/api.test.mjs"
   },
   "devDependencies": {
     "wrangler": "^4"

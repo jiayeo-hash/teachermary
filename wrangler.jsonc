@@ -2,6 +2,12 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "teachermary",
   "keep_vars": true,
+  // Not secrets: the Access team domain and application tag. Teacher emails are set in the dashboard (TEACHER_EMAILS).
+  "vars": {
+    "ACCESS_TEAM_DOMAIN": "bitter-salad-ac62.cloudflareaccess.com",
+    "ACCESS_AUD": "0e60ca574aef22f15cdb081f9da727a965085ecb49786f55bb0e269891d102b1"
+  },
+  "triggers": { "crons": ["0 16 * * *"] },
   "main": "src/worker.js",
   "compatibility_date": "2026-10-01",
   "assets": {

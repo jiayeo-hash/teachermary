@@ -6,15 +6,25 @@
 - Cloudflare Access application on `teachermary.online/teacher/*` and `/api/teacher/*`.
 - Worker code in `src/` (API) with `wrangler.jsonc` (bindings DB and FILES, static files in `public/`).
 
-## Settings the Worker needs (Workers & Pages > teachermary > Settings > Variables and Secrets)
+## Settings
+Already in `wrangler.jsonc` (not secrets): `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD`.
+Add in the dashboard (Workers & Pages > teachermary > Settings > Variables and Secrets):
+
 | Name | Value |
 |---|---|
-| `TEACHER_EMAILS` | Mary's and Ricky's emails, comma separated (same as the Access policy) |
-| `ACCESS_TEAM_DOMAIN` | your Zero Trust team domain, e.g. `yourteam.cloudflareaccess.com` |
-| `ACCESS_AUD` | the Application Audience (AUD) tag of the Access application |
+| `TEACHER_EMAILS` | optional. Mary's and Ricky's emails, comma separated. A second check on top of the Access policy. Kept out of the code because the repo is public. |
+| `RETENTION_DAYS` | optional. e.g. `90` deletes homework from lessons older than 90 days (reading and lessons are kept). Off when unset. |
 
-If any are missing the teacher API refuses every request (it fails closed).
+If `ACCESS_*` are missing the teacher API refuses every request (it fails closed).
 Never set `DEV_TEACHER_EMAIL` outside local development (it skips the login check).
+
+## Keeping storage clean
+- Delete a lesson: removes its reading and homework files.
+- Clear homework for one lesson: `DELETE /api/teacher/lessons/:id/submissions` (keeps lesson and reading).
+- Delete a class: `DELETE /api/teacher/classes/:id` with `{"confirm": "<class name>"}`.
+- See what uses space: `GET /api/teacher/storage`.
+- Nightly job (03:00 Sydney): applies `RETENTION_DAYS` and deletes stored files nothing points to (older than 2 days).
+- Optional: in R2 > teachermary-files > Settings, add a lifecycle rule to abort incomplete multipart uploads after 1 day.
 
 ## Local development
 ```

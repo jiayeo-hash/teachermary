@@ -143,6 +143,44 @@ export async function handleTeacher(request, env, url, email, rest) {
     return json({ id, link: linkFor(token), roster: await activeRoster(env, b, body.date) }, 201);
   }
 
+  // Storage use, per class and lesson, so Mary can see what to clear
+  if (a === 'storage' && method === 'GET') {
+    const rows = await env.DB.prepare(
+      `SELECT c.id AS class_id, c.name AS class_name, l.id AS lesson_id, l.lesson_date,
+        COALESCE((SELECT SUM(size_bytes) FROM materials m WHERE m.lesson_id = l.id), 0) AS material_bytes,
+        COALESCE((SELECT SUM(size_bytes) FROM submissions s WHERE s.lesson_id = l.id), 0) AS homework_bytes,
+        (SELECT COUNT(*) FROM submissions s WHERE s.lesson_id = l.id) AS homework_count
+       FROM lessons l JOIN classes c ON c.id = l.class_id ORDER BY c.name, l.lesson_date`
+    ).all();
+    const total = rows.results.reduce((n, r) => n + r.material_bytes + r.homework_bytes, 0);
+    return json({
+      totalBytes: total,
+      lessons: rows.results.map((r) => ({
+        classId: r.class_id, className: r.class_name, lessonId: r.lesson_id, date: r.lesson_date,
+        materialBytes: r.material_bytes, homeworkBytes: r.homework_bytes, homeworkCount: r.homework_count,
+      })),
+    });
+  }
+
+  // Delete a whole class: its lessons, students, files and homework. Needs the class name typed back.
+  if (a === 'classes' && b && !c && method === 'DELETE') {
+    const body = await readJson(request);
+    const cls = await env.DB.prepare('SELECT id, name FROM classes WHERE id = ?').bind(b).first();
+    if (!cls) throw new HttpError(404, 'Class not found');
+    if (body.confirm !== cls.name) throw new HttpError(400, 'Type the class name to confirm');
+    const keys = (
+      await env.DB.prepare(
+        `SELECT r2_key FROM materials WHERE lesson_id IN (SELECT id FROM lessons WHERE class_id = ?)
+         UNION ALL SELECT r2_key FROM submissions WHERE lesson_id IN (SELECT id FROM lessons WHERE class_id = ?)`
+      )
+        .bind(b, b)
+        .all()
+    ).results.map((r) => r.r2_key);
+    await env.DB.prepare('DELETE FROM classes WHERE id = ?').bind(b).run(); // cascades
+    await deleteKeys(env, keys);
+    return json({ ok: true, filesRemoved: keys.length });
+  }
+
   // ---- lessons ----
   if (a === 'lessons' && b && !c && method === 'GET') {
     const l = await lessonById(env, b);
@@ -188,6 +226,15 @@ export async function handleTeacher(request, env, url, email, rest) {
     await env.DB.prepare('DELETE FROM lessons WHERE id = ?').bind(b).run(); // cascades to rows
     await deleteKeys(env, keys);
     return json({ ok: true });
+  }
+
+  // Clear the homework of one lesson but keep the lesson and its reading
+  if (a === 'lessons' && b && c === 'submissions' && method === 'DELETE') {
+    await lessonById(env, b);
+    const keys = (await env.DB.prepare('SELECT r2_key FROM submissions WHERE lesson_id = ?').bind(b).all()).results.map((r) => r.r2_key);
+    await env.DB.prepare('DELETE FROM submissions WHERE lesson_id = ?').bind(b).run();
+    await deleteKeys(env, keys);
+    return json({ ok: true, filesRemoved: keys.length });
   }
 
   // Materials upload for a lesson

@@ -39,7 +39,8 @@ export async function requireTeacher(request, env) {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
-  if (!team || !aud || allowed.length === 0) throw new HttpError(503, 'Teacher login is not configured');
+  // TEACHER_EMAILS is an optional second check on top of the Access policy.
+  if (!team || !aud) throw new HttpError(503, 'Teacher login is not configured');
 
   const token = request.headers.get('cf-access-jwt-assertion');
   if (!token) throw new HttpError(401, 'Sign in required');
@@ -79,7 +80,7 @@ export async function requireTeacher(request, env) {
   if (!audList.includes(aud)) throw new HttpError(403, 'Wrong application');
   if (payload.iss !== `https://${team}`) throw new HttpError(403, 'Wrong issuer');
   const email = String(payload.email || '').toLowerCase();
-  if (!allowed.includes(email)) throw new HttpError(403, 'Not allowed');
+  if (!email || (allowed.length > 0 && !allowed.includes(email))) throw new HttpError(403, 'Not allowed');
   return email;
 }
 

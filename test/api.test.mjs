@@ -223,6 +223,44 @@ check('teacher deletes lesson', delLesson.status === 200);
 check('deleted lesson link stops working', (await api(`/api/l/${tokenA}`)).status === 404);
 check('its files are gone from storage', r2Exists(keysBefore.mat) === false && r2Exists(keysBefore.sub) === false);
 
+
+// ---------- keeping storage clean ----------
+const cC = await api('/api/teacher/classes', { method: 'POST', body: { name: 'Class C', students: ['Bo K.'] } });
+const classC = cC.data.id;
+const old = await api(`/api/teacher/classes/${classC}/lessons`, { method: 'POST', body: { date: day(-10) } });
+const oldTok = old.data.link.split('/')[2];
+const oldMat = await upload(`/api/teacher/lessons/${old.data.id}/materials/upload`, 'Old reading.pdf', rand(5000));
+const bo = (await api(`/api/l/${oldTok}`)).data.students[0];
+const boCookie = (await api(`/api/l/${oldTok}/login`, { method: 'POST', body: { studentId: bo.id } })).cookie;
+const oldHw = await upload(`/api/l/${oldTok}/upload`, 'old-homework.mp4', rand(4000), { cookie: boCookie });
+check('set up an old lesson with reading and homework', oldMat.done?.status === 201 && oldHw.done?.status === 200);
+
+const st = await api('/api/teacher/storage');
+const oldRow = st.data.lessons.find((l) => l.lessonId === old.data.id);
+check('storage report shows sizes per lesson', st.status === 200 && st.data.totalBytes > 0 && oldRow.homeworkBytes === 4000 && oldRow.materialBytes === 5000 && oldRow.homeworkCount === 1, oldRow);
+
+const sched = await fetch(`${BASE}/cdn-cgi/handler/scheduled`);
+await sched.text();
+await new Promise((r) => setTimeout(r, 1500));
+const afterSweep = await api(`/api/teacher/lessons/${old.data.id}`);
+check('retention sweep removes old homework but keeps lesson and reading', afterSweep.status === 200 && afterSweep.data.submissions.length === 0 && afterSweep.data.materials.length === 1);
+check('retention sweep deleted the homework file, kept the reading', r2Exists(oldHw.key) === false && r2Exists(oldMat.key) === true);
+
+const fresh = await api(`/api/teacher/classes/${classC}/lessons`, { method: 'POST', body: { date: day(2) } });
+const freshTok = fresh.data.link.split('/')[2];
+const boCookie2 = (await api(`/api/l/${freshTok}/login`, { method: 'POST', body: { studentId: bo.id } })).cookie;
+const freshHw = await upload(`/api/l/${freshTok}/upload`, 'hw.mp4', rand(3000), { cookie: boCookie2 });
+await fetch(`${BASE}/cdn-cgi/handler/scheduled`).then((r) => r.text());
+await new Promise((r) => setTimeout(r, 1500));
+check('sweep leaves recent homework alone', (await api(`/api/teacher/lessons/${fresh.data.id}`)).data.submissions.length === 1);
+const cleared = await api(`/api/teacher/lessons/${fresh.data.id}/submissions`, { method: 'DELETE' });
+check('teacher clears one lesson\'s homework', cleared.status === 200 && cleared.data.filesRemoved === 1 && r2Exists(freshHw.key) === false);
+
+const wrongConfirm = await api(`/api/teacher/classes/${classC}`, { method: 'DELETE', body: { confirm: 'class c' } });
+check('deleting a class needs its exact name', wrongConfirm.status === 400);
+const delClass = await api(`/api/teacher/classes/${classC}`, { method: 'DELETE', body: { confirm: 'Class C' } });
+check('delete class removes everything', delClass.status === 200 && r2Exists(oldMat.key) === false && (await api(`/api/l/${oldTok}`)).status === 404, delClass.data);
+
 // ---------- pages ----------
 const page = await fetch(`${BASE}/l/${tokenB}`);
 check('/l/<token> serves the student page with noindex', page.status === 200 && page.headers.get('x-robots-tag').includes('noindex'));

@@ -8,6 +8,7 @@ import { HttpError, json } from './util.js';
 import { requireTeacher } from './auth.js';
 import { handleTeacher } from './teacher.js';
 import { handleStudent } from './student.js';
+import { runCleanup } from './cleanup.js';
 
 const WRITE = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
@@ -51,5 +52,8 @@ export default {
       console.error(err);
       return json({ error: 'Something went wrong' }, 500);
     }
+  },
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(runCleanup(env).then((r) => console.log('cleanup', JSON.stringify(r))));
   },
 };
