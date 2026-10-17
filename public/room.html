@@ -52,28 +52,19 @@ Only Class A can open this lesson
 
 <sc-if value="{{isPrepare}}" hint-placeholder-val="{{ true }}">
 <div style="display: flex; flex-wrap: wrap; align-items: flex-start; gap: 24px">
-<div style="flex: 1 1 340px; max-width: 460px; min-width: 0; display: flex; flex-direction: column; gap: 24px">
-<section style="background: #FFFFFF; border: 1px solid #EBDDBD; border-radius: 28px; padding: 24px; display: flex; flex-direction: column; gap: 12px">
-<h2 style="margin: 0; font-family: 'Fredoka', sans-serif; font-weight: 700; font-size: 22px">Class schedule</h2>
-<span style="font-size: 14px; color: #5B5F85">Class A meets at 7:30 pm on:</span>
-<div style="display: flex; flex-wrap: wrap; gap: 8px">
-<sc-for list="{{dayChips}}" as="d" hint-placeholder-count="7">
-<button onClick="{{d.toggle}}" aria-pressed="{{d.on}}" style="min-height: 44px; min-width: 56px; padding: 0 12px; border-radius: 14px; font-family: 'Nunito', sans-serif; font-weight: 700; font-size: 14px; cursor: pointer; color: {{d.fg}}; background: {{d.bg}}; border: 1px solid {{d.bd}}">{{d.label}}</button>
-</sc-for>
-</div>
-<span style="font-size: 13px; color: #5B5F85; line-height: 1.5">Each class day becomes a lesson with its own link, made for you automatically. Change the days and the lessons update.</span>
-</section>
-</div>
-<div style="flex: 1 1 400px; max-width: 560px; min-width: 0; display: flex; flex-direction: column; gap: 24px">
+<div style="flex: 1 1 420px; max-width: 640px; min-width: 0; display: flex; flex-direction: column; gap: 24px">
 <section style="background: #FFFFFF; border: 1px solid #EBDDBD; border-radius: 28px; padding: 24px; display: flex; flex-direction: column; gap: 16px">
 <div style="display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px">
 <h2 style="margin: 0; font-family: 'Fredoka', sans-serif; font-weight: 700; font-size: 22px">Lessons in this room</h2>
+<a href="new.html" style="display: flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: 14px; background: #FFC93C; color: #23284A; font-weight: 700; font-size: 14px; text-decoration: none">+ New lesson</a>
+</div>
 <div style="display: flex; flex-wrap: wrap; gap: 8px">
 <sc-for list="{{lessons}}" as="l" hint-placeholder-count="4">
 <button onClick="{{l.pick}}" style="min-height: 44px; padding: 0 14px; border-radius: 99px; font-family: 'Nunito', sans-serif; font-weight: 700; font-size: 14px; cursor: pointer; color: {{l.fg}}; background: {{l.bg}}; border: 1px {{l.bs}} {{l.bd}}; text-decoration: {{l.td}}">{{l.tag}}</button>
 </sc-for>
 </div>
-<span style="font-size: 13px; color: #5B5F85; line-height: 1.5">Every lesson has its own link. Students who open it land straight on that lesson's reading and homework. Draft lessons stay hidden until you publish them.</span>
+<span style="font-size: 13px; color: #5B5F85; line-height: 1.5">Every lesson has its own link. Students who open it land straight on that lesson's reading and homework. Use + New lesson to make one for any day.</span>
 </div>
 <sc-for list="{{material}}" as="m" hint-placeholder-count="2">
 <div style="display: flex; align-items: center; gap: 12px; border: 1px solid #F5EBD3; border-radius: 16px; padding: 12px 14px">
@@ -96,21 +87,16 @@ Add a file for {{lesson.label}}
 </div>
 <sc-if value="{{lesson.canAct}}" hint-placeholder-val="{{ true }}">
 <div style="display: flex; flex-wrap: wrap; gap: 8px">
-<sc-if value="{{lesson.isCancelled}}" hint-placeholder-val="{{ false }}">
-<button onClick="{{restoreLesson}}" style="min-height: 44px; padding: 0 16px; border: 1px solid #2F6FED; border-radius: 14px; background: #FFFFFF; color: #2F6FED; font-family: 'Nunito', sans-serif; font-weight: 700; font-size: 14px; cursor: pointer">Bring this class back</button>
-</sc-if>
-<sc-if value="{{lesson.notCancelled}}" hint-placeholder-val="{{ true }}">
-<button onClick="{{cancelLesson}}" style="min-height: 44px; padding: 0 16px; border: 1px solid #E3B4B4; border-radius: 14px; background: #FFFFFF; color: #B3261E; font-family: 'Nunito', sans-serif; font-weight: 700; font-size: 14px; cursor: pointer">Cancel this class</button>
-<button onClick="{{toggleMove}}" style="min-height: 44px; padding: 0 16px; border: 1px solid #2F6FED; border-radius: 14px; background: #FFFFFF; color: #2F6FED; font-family: 'Nunito', sans-serif; font-weight: 700; font-size: 14px; cursor: pointer">{{lesson.moveLabel}}</button>
-</sc-if>
+<button onClick="{{toggleDate}}" style="min-height: 44px; padding: 0 16px; border: 1px solid #2F6FED; border-radius: 14px; background: #FFFFFF; color: #2F6FED; font-family: 'Nunito', sans-serif; font-weight: 700; font-size: 14px; cursor: pointer">Change date</button>
+<button onClick="{{askDelete}}" style="min-height: 44px; padding: 0 16px; border: 1px solid #E3B4B4; border-radius: 14px; background: #FFFFFF; color: #B3261E; font-family: 'Nunito', sans-serif; font-weight: 700; font-size: 14px; cursor: pointer">Delete lesson</button>
 </div>
 </sc-if>
-<sc-if value="{{lesson.isCancelled}}" hint-placeholder-val="{{ false }}">
-<span style="font-size: 13px; color: #5B5F85; line-height: 1.5">Students who open this link see "No class this day" instead of the lesson. Nothing is deleted.</span>
+<sc-if value="{{lesson.isPast}}" hint-placeholder-val="{{ false }}">
+<span style="font-size: 13px; color: #5B5F85; line-height: 1.5">Finished lessons are kept so the homework handed in stays safe.</span>
 </sc-if>
-<sc-if value="{{panelOpen}}" hint-placeholder-val="{{ false }}">
+<sc-if value="{{panelDate}}" hint-placeholder-val="{{ false }}">
 <div style="background: #FFF9EE; border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 10px">
-<span style="font-weight: 700; font-size: 14px">{{panelTitle}}</span>
+<span style="font-weight: 700; font-size: 14px">Pick the new day for {{lesson.label}}</span>
 <div style="display: flex; flex-wrap: wrap; gap: 8px">
 <sc-for list="{{dateChips}}" as="d" hint-placeholder-count="6">
 <button onClick="{{d.pick}}" style="min-height: 44px; padding: 0 12px; border-radius: 12px; border: 1px solid #C4B48A; background: #FFFFFF; color: #23284A; font-family: 'Nunito', sans-serif; font-weight: 700; font-size: 14px; cursor: pointer">{{d.label}}</button>
@@ -120,8 +106,16 @@ Add a file for {{lesson.label}}
 <button onClick="{{closePanel}}" style="align-self: flex-start; min-height: 44px; padding: 0 12px; border: 0; background: transparent; color: #5B5F85; font-family: 'Nunito', sans-serif; font-weight: 700; font-size: 14px; cursor: pointer">Never mind</button>
 </div>
 </sc-if>
+<sc-if value="{{panelDelete}}" hint-placeholder-val="{{ false }}">
+<div style="background: #FFFFFF; border: 2px solid #E3B4B4; border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 10px">
+<span style="font-weight: 700; font-size: 15px; line-height: 1.4">Delete {{lesson.label}}? Its link stops working and its files are removed.</span>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<button onClick="{{confirmDelete}}" style="min-height: 44px; padding: 0 16px; border: 0; border-radius: 14px; background: #B3261E; color: #FFFFFF; font-family: 'Nunito', sans-serif; font-weight: 700; font-size: 14px; cursor: pointer">Yes, delete it</button>
+<button onClick="{{closePanel}}" style="min-height: 44px; padding: 0 16px; border: 1px solid #C4B48A; border-radius: 14px; background: #FFFFFF; color: #23284A; font-family: 'Nunito', sans-serif; font-weight: 700; font-size: 14px; cursor: pointer">No, keep it</button>
 </div>
-<button onClick="{{openExtra}}" style="min-height: 48px; border: 2px dashed #C4B48A; border-radius: 16px; background: transparent; color: #2F6FED; font-family: 'Nunito', sans-serif; font-weight: 700; font-size: 15px; cursor: pointer">+ Add an extra or make-up lesson</button>
+</div>
+</sc-if>
+</div>
 <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; background: #FFF9EE; border: 1px solid #EBDDBD; border-radius: 16px; padding: 6px 6px 6px 14px">
 <div style="display: flex; flex-direction: column; line-height: 1.25"><span style="font-size: 12px; color: #5B5F85">Link for {{lesson.label}}</span><span style="font-size: 14px">{{lesson.link}}</span></div>
 <button onClick="{{copyLink}}" style="min-height: 44px; padding: 0 16px; border: 0; border-radius: 14px; background: #2F6FED; color: #FFFFFF; font-family: 'Nunito', sans-serif; font-weight: 700; font-size: 14px; cursor: pointer">{{copyLabel}}</button>
@@ -229,91 +223,42 @@ class Component extends DCLogic {
     const view = st.view || 'prepare';
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const days = st.days || { 1: true, 3: true };
-    const dayChips = [1, 2, 3, 4, 5, 6, 0].map((n) => ({
-      label: dayNames[n],
-      on: !!days[n],
-      bg: days[n] ? '#2F6FED' : '#FFFFFF',
-      fg: days[n] ? '#FFFFFF' : '#23284A',
-      bd: days[n] ? '#2F6FED' : '#C4B48A',
-      toggle: () => {
-        const d = Object.assign({}, days);
-        d[n] = !d[n];
-        if (!Object.values(d).some(Boolean)) return;
-        this.setState({ days: d, lessonId: null });
-      }
-    }));
-    const cancelled = st.cancelled || {};
-    const moved = st.moved || {};
-    const extras = st.extras || [];
     const fmt = (dt) => dayNames[dt.getDay()] + ' ' + dt.getDate() + ' ' + monthNames[dt.getMonth()];
     const slug = (id) => id.toLowerCase().split(' ').slice(1).join('');
-    const items = [];
-    for (let i = 0; i < 28; i++) {
-      const dt = new Date(2026, 9, 5 + i);
-      if (!days[dt.getDay()]) continue;
-      const id = fmt(dt);
-      const m = moved[id];
-      items.push({ id, dt: m ? m.dt : dt, from: m ? id : null, extra: false });
-    }
-    extras.forEach((e) => items.push({ id: e.id, dt: new Date(e.t), from: null, extra: true }));
-    items.sort((x, y) => x.dt - y.dt);
-    const today = new Date(2026, 9, 18);
-    const nowIdx = (() => {
-      const k = items.findIndex((x) => x.dt >= today && !cancelled[x.id]);
-      return k < 0 ? items.length - 1 : k;
-    })();
-    const shown = items.slice(Math.max(0, nowIdx - 2), nowIdx + 4);
-    const lessonId = shown.some((x) => x.id === st.lessonId) ? st.lessonId : (items[nowIdx] || shown[0]).id;
-    const lessons = shown.map((x) => {
-      const k = items.indexOf(x);
-      const isCancelled = !!cancelled[x.id];
-      const status = isCancelled ? 'cancelled' : x.dt < today ? 'past' : k === nowIdx ? 'open' : 'draft';
-      const label = fmt(x.dt);
+    const list = st.lessonList || [
+      { id: 'Mon 12 Oct', date: 'Mon 12 Oct', status: 'past' },
+      { id: 'Wed 14 Oct', date: 'Wed 14 Oct', status: 'past' },
+      { id: 'Mon 19 Oct', date: 'Mon 19 Oct', status: 'open' },
+      { id: 'Wed 21 Oct', date: 'Wed 21 Oct', status: 'draft' },
+      { id: 'Mon 26 Oct', date: 'Mon 26 Oct', status: 'draft' }
+    ];
+    const lessonId = list.some((x) => x.id === st.lessonId) ? st.lessonId : (list.find((x) => x.status === 'open') || list[0]).id;
+    const panel = st.panel || null;
+    const lessons = list.map((x) => {
       const on = x.id === lessonId;
-      const suffix = { cancelled: ' · cancelled', open: ' · open', draft: ' · draft', past: '' }[status] + (x.extra ? ' · extra' : '');
       return {
-        id: x.id, label, status,
-        tag: label + suffix,
-        statusText: { cancelled: 'Cancelled, no class this day', open: 'Open for students', draft: 'Draft, hidden from students', past: 'Finished' }[status] + (x.from ? ' · moved from ' + x.from : '') + (x.extra ? ' · extra lesson' : ''),
+        id: x.id, label: x.date, status: x.status,
+        tag: x.date + (x.status === 'open' ? ' · open' : x.status === 'draft' ? ' · draft' : ''),
+        statusText: { open: 'Open for students', draft: 'Draft, hidden from students', past: 'Finished' }[x.status] + (x.id !== x.date ? ' · moved from ' + x.id : ''),
         link: 'teachermary.online/l/mango-7k2-' + slug(x.id),
-        canAct: status !== 'past',
-        isCancelled,
-        notCancelled: !isCancelled,
-        moveLabel: x.extra ? 'Change day' : 'Move to another day',
-        bg: on ? (isCancelled ? '#5B5F85' : '#2F6FED') : status === 'draft' || isCancelled ? '#FFF9EE' : '#FFFFFF',
-        fg: on ? '#FFFFFF' : status === 'draft' || isCancelled ? '#5B5F85' : '#23284A',
-        bd: on ? (isCancelled ? '#5B5F85' : '#2F6FED') : '#C4B48A',
-        bs: (status === 'draft' || isCancelled) && !on ? 'dashed' : 'solid',
-        td: isCancelled ? 'line-through' : 'none',
+        canAct: x.status !== 'past',
+        isPast: x.status === 'past',
+        bg: on ? '#2F6FED' : x.status === 'draft' ? '#FFF9EE' : '#FFFFFF',
+        fg: on ? '#FFFFFF' : x.status === 'draft' ? '#5B5F85' : '#23284A',
+        bd: on ? '#2F6FED' : '#C4B48A',
+        bs: x.status === 'draft' && !on ? 'dashed' : 'solid',
         pick: () => this.setState({ lessonId: x.id, copied: false, panel: null })
       };
     });
     const lesson = lessons.find((l) => l.id === lessonId) || lessons[0];
-    const panel = st.panel || null;
-    const taken = items.map((x) => fmt(x.dt));
+    const taken = list.map((x) => x.date);
     const dateChips = [];
     for (let i = 0; i < 21; i++) {
-      const dt = new Date(2026, 9, 18 + i);
-      const label = fmt(dt);
-      if (taken.indexOf(label) !== -1 && panel !== 'extra') continue;
-      if (panel === 'extra' && taken.indexOf(label) !== -1) continue;
+      const label = fmt(new Date(2026, 9, 18 + i));
+      if (taken.indexOf(label) !== -1) continue;
       dateChips.push({
         label,
-        pick: () => {
-          if (panel === 'move') {
-            const mv = Object.assign({}, moved);
-            const src = items.find((x) => x.id === lessonId);
-            if (src && src.extra) {
-              this.setState({ extras: extras.map((e) => (e.id === lessonId ? { id: label, t: dt.getTime() } : e)), lessonId: label, panel: null });
-              return;
-            }
-            mv[lessonId] = { dt };
-            this.setState({ moved: mv, panel: null });
-          } else {
-            this.setState({ extras: extras.concat([{ id: label, t: dt.getTime() }]), lessonId: label, panel: null });
-          }
-        }
+        pick: () => this.setState({ lessonList: list.map((x) => (x.id === lessonId ? { id: x.id, date: label, status: x.status } : x)), panel: null })
       });
     }
     const base = [
@@ -348,7 +293,7 @@ class Component extends DCLogic {
       { file: 'Lesson 12 worksheet.pdf', meta: 'PDF · students can download' }
     ];
     return {
-      subs, sel, lines, material, lessons, lesson, dayChips,
+      subs, sel, lines, material, lessons, lesson, dateChips,
       isPrepare: view === 'prepare', isReview: view === 'review',
       toReview: subs.filter((s) => !reviewed[s.id]).length,
       tabP: { bg: view === 'prepare' ? '#FFC93C' : '#FFFFFF', fg: '#23284A', bd: view === 'prepare' ? '#D9A400' : '#EBDDBD' },
@@ -356,16 +301,13 @@ class Component extends DCLogic {
       goPrepare: () => this.setState({ view: 'prepare' }),
       goReview: () => this.setState({ view: 'review' }),
       reviewLessons: lessons.filter((l) => l.status === 'open' || l.status === 'past'),
-      panelMove: panel === 'move', panelExtra: panel === 'extra', panelOpen: panel === 'move' || panel === 'extra',
-      panelTitle: panel === 'move' ? 'Pick the new day for ' + lesson.label : 'Pick the day for the extra lesson',
-      dateChips,
-      toggleMove: () => this.setState({ panel: panel === 'move' ? null : 'move' }),
-      openExtra: () => this.setState({ panel: 'extra' }),
-      closePanel: () => this.setState({ panel: null }),
-      cancelLesson: () => { const c = Object.assign({}, cancelled); c[lessonId] = true; this.setState({ cancelled: c, panel: null }); },
-      restoreLesson: () => { const c = Object.assign({}, cancelled); delete c[lessonId]; this.setState({ cancelled: c }); },
       copyLabel: st.copied ? 'Copied' : 'Copy link',
       copyLink: () => this.setState({ copied: true }),
+      panelDate: panel === 'date', panelDelete: panel === 'delete',
+      toggleDate: () => this.setState({ panel: panel === 'date' ? null : 'date' }),
+      askDelete: () => this.setState({ panel: 'delete' }),
+      closePanel: () => this.setState({ panel: null }),
+      confirmDelete: () => this.setState({ lessonList: list.filter((x) => x.id !== lessonId), lessonId: null, panel: null }),
       toggleReviewed: () => {
         const r = Object.assign({}, reviewed);
         r[cur.id] = !r[cur.id];
