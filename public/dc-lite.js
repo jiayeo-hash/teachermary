@@ -1,5 +1,5 @@
 /*
- * dc-lite.js - a tiny renderer for the Homeroom mockup pages.
+ * dc-lite.js - a tiny renderer for the Teacher Mary pages.
  *
  * Each page keeps its markup inside <x-dc> and its data/logic in a
  * <script type="text/x-dc"> block. This file reads both, renders the markup
@@ -135,8 +135,25 @@
         saved[f.id] = f.value;
       });
 
+      // elements marked data-keep="key" (a playing video, a PDF frame) are moved into the
+      // new tree instead of being rebuilt, so a redraw does not restart them
+      var keepers = {};
+      Array.prototype.forEach.call(host.querySelectorAll('[data-keep]'), function (el) {
+        keepers[el.getAttribute('data-keep')] = el;
+      });
+
       var out = [];
       renderNodes(template, inst.renderVals(), out);
+
+      out.forEach(function (n) {
+        if (n.nodeType !== 1) return;
+        var found = Array.prototype.slice.call(n.querySelectorAll('[data-keep]'));
+        if (n.hasAttribute('data-keep')) found.unshift(n);
+        found.forEach(function (fresh) {
+          var old = keepers[fresh.getAttribute('data-keep')];
+          if (old && old !== fresh && fresh.parentNode) fresh.parentNode.replaceChild(old, fresh);
+        });
+      });
 
       while (host.firstChild) host.removeChild(host.firstChild);
       out.forEach(function (n) {
@@ -152,6 +169,7 @@
 
     inst._rerender = draw;
     draw();
+    if (typeof inst.componentDidMount === 'function') inst.componentDidMount();
   }
 
   if (document.readyState === 'loading') {

@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>New lesson · Teacher Mary</title>
+<meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/teacher.css">
+<script src="/app.js"></script><script src="/teacher-common.js"></script>
+</head><body>
+<main id="app"><p class="muted">Loading…</p></main>
+<script>
+(function () {
+  var h = TMT.h;
+  TMT.header('New lesson');
+  var app = document.getElementById('app');
+  var S = { classes: [], classId: null, newName: '', date: '', roster: [], add: [], addDraft: '', files: [], star: {}, busy: false, progress: '', result: null };
+
+  function iso(d) { return d.toISOString().slice(0, 10); }
+  function next14() {
+    var out = [], base = new Date(TM.todayIso() + 'T00:00:00Z');
+    for (var i = 0; i < 14; i++) out.push(iso(new Date(base.getTime() + i * 86400000)));
+    return out;
+  }
+  function isNew() { return S.classId === 'new'; }
+
+  function pickClass(id) {
+    S.classId = id; S.roster = []; S.add = []; S.star = {};
+    if (id && id !== 'new') {
+      TM.api('/api/teacher/classes/' + id).then(function (c) {
+        S.roster = c.roster.map(function (r) { return { id: r.id, name: r.name, remove: false }; });
+        var counts = {};
+        c.lessons.forEach(function (l) { var wd = new Date(l.date + 'T00:00:00Z').getUTCDay(); counts[wd] = (counts[wd] || 0) + 1; });
+        Object.keys(counts).forEach(function (k) { if (counts[k] >= 2) S.star[k] = true; });
+        draw();
+      }).catch(TMT.fail);
+    }
+    draw();
+  }
+
+  function addName() {
+    var n = S.addDraft.trim();
+    if (!n) return;
+    S.add.push(n); S.addDraft = ''; draw();
+    var i = document.getElementById('addname'); if (i) i.focus();
+  }
+
+  function section(num, title, body) {
+    return h('section', { class: 'card flat' }, [h('h2', { style: 'font-size:22px' }, num + '. ' + title)].concat(body));
+  }
+
+  function draw() {
+    app.innerHTML = '';
+    if (S.result) return drawDone();
+    app.appendChild(h('div', {}, [h('h1', { style: 'font-size:36px' }, 'New lesson'),
+      h('p', { class: 'muted', style: 'margin:6px 0 0' }, 'Pick a class, pick the day, check who is in it, add the reading. The link is made at the end.')]));
+
+    // 1 class
+    app.appendChild(section(1, 'Which class?', [h('div', { class: 'chips' }, S.classes.map(function (c) {
+      return h('button', { class: 'chip' + (S.classId === c.id ? ' on' : ''), type: 'button', onclick: function () { pickClass(c.id); } }, c.name);
+    }).concat([h('button', { class: 'chip' + (isNew() ? ' on' : ''), type: 'button', id: 'newclass', onclick: function () { pickClass('new'); } }, '+ New class')])),
+      isNew() ? h('input', { type: 'text', id: 'classname', placeholder: 'Class name, e.g. Class A', maxlength: 40, value: S.newName, oninput: function (e) { S.newName = e.target.value; } }) : null]));
+    if (!S.classId) return;
+
+    // 2 date
+    var dayChips = next14().map(function (d) {
+      var wd = new Date(d + 'T00:00:00Z').getUTCDay();
+      return h('button', { class: 'chip' + (S.date === d ? ' on' : ''), type: 'button', 'data-date': d, onclick: function () { S.date = d; draw(); } },
+        [S.star[wd] ? h('span', { class: 'star' }, '★ ') : null, TMT.dl(d)]);
+    });
+    app.appendChild(section(2, 'Which day?', [
+      h('div', { class: 'chips' }, dayChips),
+      h('div', { class: 'row' }, [h('span', { class: 'muted' }, 'Or pick another date:'), h('input', { type: 'date', id: 'date', value: S.date, onchange: function (e) { S.date = e.target.value; draw(); } })]),
+      Object.keys(S.star).length ? h('span', { class: 'muted' }, '★ = a day this class usually meets') : null,
+    ]));
+
+    // 3 students
+    var rosterRows = S.roster.map(function (r) {
+      return h('div', { class: 'item', 'data-student': r.name }, [
+        h('span', { style: r.remove ? 'text-decoration:line-through;color:#8a8fb0' : '' }, r.name),
+        h('button', { class: 'btn small ' + (r.remove ? 'ghost' : 'danger'), type: 'button', onclick: function () { r.remove = !r.remove; draw(); } }, r.remove ? 'Keep' : 'Remove'),
+      ]);
+    });
+    var addRows = S.add.map(function (n, i) {
+      return h('div', { class: 'item' }, [h('span', {}, n + ' (new)'), h('button', { class: 'btn small danger', type: 'button', onclick: function () { S.add.splice(i, 1); draw(); } }, 'Undo')]);
+    });
+    app.appendChild(section(3, 'Who is in this lesson?', [
+      isNew() ? null : h('span', { class: 'muted' }, 'Carried over from the last lesson. Changes you make here carry on to later lessons too.'),
+      h('div', { class: 'list' }, rosterRows.concat(addRows)),
+      h('div', { class: 'row' }, [
+        h('input', { type: 'text', id: 'addname', placeholder: 'Add a student, e.g. Linh T.', maxlength: 40, value: S.addDraft,
+          oninput: function (e) { S.addDraft = e.target.value; }, onkeydown: function (e) { if (e.key === 'Enter') { e.preventDefault(); addName(); } } }),
+        h('button', { class: 'btn', type: 'button', id: 'addbtn', onclick: addName }, 'Add'),
+      ]),
+      h('span', { class: 'muted' }, 'Tip: first name and last initial keeps things private.'),
+    ]));
+
+    // 4 files
+    app.appendChild(section(4, 'Reading for this lesson', [
+      h('input', { type: 'file', id: 'files', multiple: true, accept: '.pdf,.doc,.docx,.mp4,.m4v,.mov,.webm,.jpg,.jpeg,.png,.heic,.mp3,.m4a', onchange: function (e) {
+        for (var i = 0; i < e.target.files.length; i++) S.files.push(e.target.files[i]);
+        e.target.value = ''; draw();
+      } }),
+      h('div', { class: 'list' }, S.files.map(function (f, i) {
+        return h('div', { class: 'item' }, [h('span', {}, f.name + ' · ' + TM.fmtSize(f.size)), h('button', { class: 'btn small danger', type: 'button', onclick: function () { S.files.splice(i, 1); draw(); } }, 'Remove')]);
+      })),
+      h('span', { class: 'muted' }, 'You can also add files later from the class page.'),
+    ]));
+
+    // go
+    var ready = S.date && (!isNew() || S.newName.trim());
+    app.appendChild(h('div', { class: 'row' }, [
+      h('button', { class: 'btn green', id: 'create', type: 'button', disabled: !ready || S.busy, onclick: create }, S.busy ? 'Creating…' : 'Create lesson and link'),
+      h('span', { class: 'muted', id: 'progress' }, S.progress),
+    ]));
+  }
+
+  function create() {
+    S.busy = true; S.progress = 'Creating…'; draw();
+    var p;
+    var removeIds = S.roster.filter(function (r) { return r.remove; }).map(function (r) { return r.id; });
+    if (isNew()) {
+      p = TM.api('/api/teacher/classes', { method: 'POST', body: { name: S.newName.trim(), students: S.add } }).then(function (c) {
+        S.classId = c.id;
+        return TM.api('/api/teacher/classes/' + c.id + '/lessons', { method: 'POST', body: { date: S.date } });
+      });
+    } else {
+      p = TM.api('/api/teacher/classes/' + S.classId + '/lessons', { method: 'POST', body: { date: S.date, remove: removeIds, add: S.add } });
+    }
+    p.then(function (lesson) {
+      var chain = Promise.resolve();
+      S.files.forEach(function (f, i) {
+        chain = chain.then(function () {
+          return TM.upload('/api/teacher/lessons/' + lesson.id + '/materials/upload', f, function (pct) {
+            var el = document.getElementById('progress'); if (el) el.textContent = 'Uploading ' + (i + 1) + ' of ' + S.files.length + ' (' + f.name + '): ' + Math.round(pct * 100) + '%';
+          });
+        });
+      });
+      return chain.then(function () { S.result = { lesson: lesson, count: S.files.length }; S.busy = false; draw(); });
+    }).catch(function (e) {
+      S.busy = false; S.progress = ''; draw(); TMT.fail(e);
+    });
+  }
+
+  function drawDone() {
+    var r = S.result;
+    app.appendChild(h('section', { class: 'card flat', id: 'done' }, [
+      h('h1', { style: 'font-size:34px' }, 'Your link is ready'),
+      h('span', { class: 'muted' }, TMT.dl(S.date) + ' · ' + r.count + ' file' + (r.count === 1 ? '' : 's') + ' added'),
+      h('div', { class: 'link', id: 'newlink' }, TM.absUrl(r.lesson.link)),
+      h('div', { class: 'row' }, [
+        TMT.copyBtn(r.lesson.link, 'Copy link'),
+        h('a', { class: 'btn ghost', href: '/teacher/class/?id=' + S.classId + '&lesson=' + r.lesson.id }, 'Open lesson'),
+        h('a', { class: 'btn ghost', href: '/teacher/new/' }, 'Make another'),
+      ]),
+    ]));
+  }
+
+  TM.api('/api/teacher/overview').then(function (o) {
+    S.classes = o.classes;
+    var want = TMT.qs('class');
+    if (want && o.classes.some(function (c) { return c.id === want; })) pickClass(want); else draw();
+  }).catch(function (e) { app.innerHTML = ''; app.appendChild(h('p', {}, 'Could not load: ' + e.message)); });
+})();
+</script></body></html>

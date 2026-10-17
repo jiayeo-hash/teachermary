@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Class · Teacher Mary</title>
+<meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/teacher.css">
+<script src="/app.js"></script><script src="/teacher-common.js"></script>
+</head><body>
+<main id="app"><p class="muted">Loading…</p></main>
+<script>
+(function () {
+  var h = TMT.h;
+  TMT.header('Class');
+  var app = document.getElementById('app');
+  var classId = TMT.qs('id');
+  var S = { cls: null, tab: TMT.qs('tab') === 'review' ? 'review' : 'prepare', lessonId: TMT.qs('lesson'), detail: null, viewing: null, addDraft: '', busy: '' };
+
+  function reloadClass() {
+    return TM.api('/api/teacher/classes/' + classId).then(function (c) {
+      S.cls = c;
+      if (!S.lessonId || !c.lessons.some(function (l) { return l.id === S.lessonId; })) {
+        var withWork = c.lessons.filter(function (l) { return l.submissions > 0; });
+        var pick = S.tab === 'review' && withWork.length ? withWork[withWork.length - 1] : c.lessons[c.lessons.length - 1];
+        S.lessonId = pick ? pick.id : null;
+      }
+      return loadDetail();
+    });
+  }
+  function loadDetail() {
+    if (!S.lessonId) { S.detail = null; draw(); return Promise.resolve(); }
+    return TM.api('/api/teacher/lessons/' + S.lessonId).then(function (d) { S.detail = d; draw(); });
+  }
+  function act(p, okMsg, after) {
+    return p.then(function (r) { if (okMsg) TMT.toast(okMsg); return after ? after(r) : reloadClass(); }).catch(TMT.fail);
+  }
+  function lessonPicker() {
+    var sel = h('select', { id: 'lessonpick', onchange: function (e) { S.lessonId = e.target.value; S.viewing = null; loadDetail(); } },
+      S.cls.lessons.slice().reverse().map(function (l) {
+        return h('option', { value: l.id, selected: l.id === S.lessonId }, TMT.dl(l.date) + (l.toReview ? ' · ' + l.toReview + ' to review' : ''));
+      }));
+    return sel;
+  }
+
+  function draw() {
+    app.innerHTML = '';
+    var c = S.cls;
+    app.appendChild(h('div', { class: 'row between' }, [
+      h('div', {}, [h('h1', { style: 'font-size:36px' }, c.class.name), h('span', { class: 'muted' }, c.roster.length + ' students · ' + c.lessons.length + ' lessons')]),
+      h('a', { class: 'btn sun', href: '/teacher/new/?class=' + classId }, '+ New lesson'),
+    ]));
+    app.appendChild(h('div', { class: 'tabs' }, [
+      h('button', { class: 'tab' + (S.tab === 'prepare' ? ' on' : ''), id: 'tab-prepare', onclick: function () { S.tab = 'prepare'; draw(); } }, 'Prepare'),
+      h('button', { class: 'tab' + (S.tab === 'review' ? ' on' : ''), id: 'tab-review', onclick: function () { S.tab = 'review'; draw(); } }, 'Review'),
+    ]));
+    if (S.tab === 'prepare') drawPrepare(); else drawReview();
+  }
+
+  function drawPrepare() {
+    var c = S.cls, d = S.detail;
+    if (!c.lessons.length) app.appendChild(h('div', { class: 'card flat' }, [h('span', { class: 'muted' }, 'No lessons yet. Press "New lesson".')]));
+    else {
+      app.appendChild(h('div', { class: 'card flat' }, [
+        h('div', { class: 'row' }, [h('h2', { style: 'font-size:22px' }, 'Lesson'), lessonPicker()]),
+        d ? lessonPanel(d) : null,
+      ]));
+    }
+    drawStudents();
+    drawDanger();
+  }
+
+  function lessonPanel(d) {
+    var L = d.lesson;
+    var dateInput = h('input', { type: 'date', id: 'newdate', value: L.date });
+    var fileIn = h('input', { type: 'file', id: 'addfile', multiple: true, accept: '.pdf,.doc,.docx,.mp4,.m4v,.mov,.webm,.jpg,.jpeg,.png,.heic,.mp3,.m4a', onchange: function (e) {
+      var files = [].slice.call(e.target.files); e.target.value = '';
+      var chain = Promise.resolve();
+      files.forEach(function (f, i) {
+        chain = chain.then(function () {
+          return TM.upload('/api/teacher/lessons/' + L.id + '/materials/upload', f, function (p) {
+            var el = document.getElementById('upstat'); if (el) el.textContent = 'Uploading ' + f.name + ': ' + Math.round(p * 100) + '%';
+          });
+        });
+      });
+      chain.then(function () { TMT.toast('Added'); return reloadClass(); }).catch(TMT.fail);
+    } });
+    return h('div', { class: 'list', id: 'lessonpanel' }, [
+      h('div', { class: 'row' }, [TMT.pill(L.status), h('div', { class: 'link' }, TM.absUrl(L.link)), TMT.copyBtn(L.link)]),
+      h('div', { class: 'row' }, [
+        h('span', { class: 'muted' }, 'Status:'),
+        h('select', { id: 'status', onchange: function (e) { act(TM.api('/api/teacher/lessons/' + L.id, { method: 'PATCH', body: { status: e.target.value } }), 'Saved'); } },
+          [['open', 'Open (students can hand in)'], ['closed', 'Closed (no more changes)'], ['draft', 'Draft']].map(function (o) { return h('option', { value: o[0], selected: o[0] === L.status }, o[1]); })),
+      ]),
+      h('div', { class: 'row' }, [h('span', { class: 'muted' }, 'Date:'), dateInput,
+        h('button', { class: 'btn small', id: 'savedate', onclick: function () { act(TM.api('/api/teacher/lessons/' + L.id, { method: 'PATCH', body: { date: dateInput.value } }), 'Date changed'); } }, 'Change date')]),
+      h('h3', { style: 'font-size:18px;margin-top:8px' }, 'Reading'),
+      d.materials.length ? h('div', { class: 'list' }, d.materials.map(function (m) {
+        return h('div', { class: 'item', 'data-material': m.name }, [
+          h('span', {}, m.name + ' · ' + TM.fmtSize(m.size)),
+          h('span', { class: 'row' }, [
+            h('a', { class: 'btn small ghost', href: '/api/teacher/materials/' + m.id + '/file', target: '_blank', rel: 'noopener' }, 'View'),
+            h('button', { class: 'btn small danger', onclick: function () { if (confirm('Remove ' + m.name + '? Students will no longer see it.')) act(TM.api('/api/teacher/materials/' + m.id, { method: 'DELETE' }), 'Removed'); } }, 'Remove'),
+          ]),
+        ]);
+      })) : h('span', { class: 'muted' }, 'No reading added yet.'),
+      h('div', { class: 'row' }, [fileIn, h('span', { class: 'muted', id: 'upstat' }, '')]),
+      h('h3', { style: 'font-size:18px;margin-top:8px' }, 'Clean up'),
+      h('div', { class: 'row' }, [
+        h('button', { class: 'btn danger small', id: 'clearhw', onclick: function () {
+          if (confirm('Delete all ' + d.submissions.length + ' homework file(s) for this lesson? This cannot be undone.')) act(TM.api('/api/teacher/lessons/' + L.id + '/submissions', { method: 'DELETE' }), 'Homework cleared');
+        } }, 'Clear homework (' + d.submissions.length + ')'),
+        h('button', { class: 'btn danger small', id: 'dellesson', onclick: function () {
+          if (confirm('Delete this whole lesson, its reading and all homework? The link will stop working.')) { S.lessonId = null; act(TM.api('/api/teacher/lessons/' + L.id, { method: 'DELETE' }), 'Lesson deleted'); }
+        } }, 'Delete lesson'),
+      ]),
+    ]);
+  }
+
+  function drawStudents() {
+    var c = S.cls;
+    function add() {
+      var n = S.addDraft.trim(); if (!n) return; S.addDraft = '';
+      act(TM.api('/api/teacher/classes/' + classId + '/roster', { method: 'POST', body: { add: [n] } }), 'Added');
+    }
+    app.appendChild(h('section', { class: 'card flat', id: 'students' }, [
+      h('h2', { style: 'font-size:22px' }, 'Students'),
+      h('span', { class: 'muted' }, 'Changes here apply from today onward. Earlier lessons keep their original list. A PIN (4 to 6 numbers) is optional and stops friends opening each other\'s name.'),
+      h('div', { class: 'list' }, c.roster.map(function (s) {
+        return h('div', { class: 'item', 'data-student': s.name }, [
+          h('span', {}, [s.name, s.hasPin ? h('span', { class: 'muted' }, ' · has PIN') : null]),
+          h('span', { class: 'row' }, [
+            h('button', { class: 'btn small ghost', onclick: function () {
+              var pin = prompt('New PIN for ' + s.name + ' (4 to 6 numbers):'); if (pin) act(TM.api('/api/teacher/students/' + s.id + '/pin', { method: 'PUT', body: { pin: pin } }), 'PIN saved');
+            } }, 'Set PIN'),
+            s.hasPin ? h('button', { class: 'btn small ghost', onclick: function () { act(TM.api('/api/teacher/students/' + s.id + '/pin', { method: 'PUT', body: { pin: null } }), 'PIN removed'); } }, 'No PIN') : null,
+            h('button', { class: 'btn small danger', onclick: function () { if (confirm('Remove ' + s.name + ' from today onward?')) act(TM.api('/api/teacher/classes/' + classId + '/roster', { method: 'POST', body: { remove: [s.id] } }), 'Removed'); } }, 'Remove'),
+          ]),
+        ]);
+      })),
+      h('div', { class: 'row' }, [
+        h('input', { type: 'text', id: 'addstudent', placeholder: 'Add a student', maxlength: 40, value: S.addDraft, oninput: function (e) { S.addDraft = e.target.value; }, onkeydown: function (e) { if (e.key === 'Enter') add(); } }),
+        h('button', { class: 'btn', id: 'addstudentbtn', onclick: add }, 'Add'),
+      ]),
+    ]));
+  }
+
+  function drawDanger() {
+    app.appendChild(h('section', { class: 'card flat' }, [
+      h('h2', { style: 'font-size:22px' }, 'Delete this class'),
+      h('span', { class: 'muted' }, 'Removes the class, every lesson, all reading and all homework for good.'),
+      h('button', { class: 'btn danger', id: 'delclass', style: 'align-self:flex-start', onclick: function () {
+        var t = prompt('To delete everything in this class, type its name: ' + S.cls.class.name);
+        if (t == null) return;
+        TM.api('/api/teacher/classes/' + classId, { method: 'DELETE', body: { confirm: t } }).then(function () { location.href = '/teacher/'; }).catch(TMT.fail);
+      } }, 'Delete class'),
+    ]));
+  }
+
+  function viewer(sub) {
+    var url = '/api/teacher/submissions/' + sub.id + '/file';
+    var ct = sub.contentType || '';
+    var node;
+    if (ct.indexOf('video/') === 0) node = h('video', { controls: true, preload: 'metadata', playsinline: true, src: url });
+    else if (ct.indexOf('audio/') === 0) node = h('audio', { controls: true, src: url, style: 'width:100%' });
+    else if (ct.indexOf('image/') === 0 && ct !== 'image/heic') node = h('img', { src: url, alt: sub.name });
+    else if (ct === 'application/pdf') node = h('iframe', { src: url, title: sub.name });
+    else node = h('div', { style: 'padding:20px;color:#fff' }, 'This file type cannot be shown here. Use Download.');
+    return h('div', { class: 'viewer', id: 'viewer' }, node);
+  }
+
+  function drawReview() {
+    var c = S.cls, d = S.detail;
+    if (!d) { app.appendChild(h('div', { class: 'card flat' }, h('span', { class: 'muted' }, 'No lessons yet.'))); return; }
+    var box = h('section', { class: 'card flat' }, [h('div', { class: 'row' }, [h('h2', { style: 'font-size:22px' }, 'Homework'), lessonPicker()])]);
+    if (!d.submissions.length) box.appendChild(h('span', { class: 'muted' }, 'Nothing handed in for this lesson yet.'));
+    d.submissions.forEach(function (sub) {
+      var fb = h('textarea', { id: 'fb-' + sub.id, placeholder: 'Message for ' + sub.studentName + ' (they will see it)', value: sub.feedback || '' });
+      var chk = h('input', { type: 'checkbox', id: 'rv-' + sub.id, checked: sub.reviewed ? true : null });
+      var open = S.viewing === sub.id;
+      box.appendChild(h('div', { class: 'card flat', 'data-sub': sub.studentName, style: 'border-radius:18px' }, [
+        h('div', { class: 'row between' }, [
+          h('span', {}, [h('b', {}, sub.studentName), ' · ' + sub.name + ' · ' + TM.fmtSize(sub.size) + ' · ' + TM.ago(sub.uploadedAt, 'en') + (sub.replacedAt ? ' (changed)' : '')]),
+          h('span', { class: 'row' }, [
+            h('button', { class: 'btn small', 'data-act': 'watch', onclick: function () { S.viewing = open ? null : sub.id; draw(); } }, open ? 'Hide' : 'Watch / read'),
+            h('a', { class: 'btn small ghost', href: '/api/teacher/submissions/' + sub.id + '/file?download=1' }, 'Download'),
+          ]),
+        ]),
+        open ? viewer(sub) : null,
+        fb,
+        h('div', { class: 'row' }, [
+          h('label', { class: 'row', style: 'gap:6px' }, [chk, 'Reviewed']),
+          h('button', { class: 'btn small green', 'data-act': 'save', onclick: function () {
+            TM.api('/api/teacher/submissions/' + sub.id, { method: 'PATCH', body: { feedback: fb.value, reviewed: chk.checked } }).then(function () {
+              sub.feedback = fb.value; sub.reviewed = chk.checked; TMT.toast('Saved');
+            }).catch(TMT.fail);
+          } }, 'Save'),
+        ]),
+      ]));
+    });
+    if (d.notHandedIn.length) box.appendChild(h('span', { class: 'muted', id: 'nothanded' }, 'Not handed in yet: ' + d.notHandedIn.join(', ')));
+    app.appendChild(box);
+  }
+
+  if (!classId) { app.innerHTML = ''; app.appendChild(h('p', {}, 'No class chosen. ')); app.appendChild(h('a', { href: '/teacher/' }, 'Back to your classes')); return; }
+  reloadClass().catch(function (e) { app.innerHTML = ''; app.appendChild(h('p', {}, 'Could not load: ' + e.message + ' ')); app.appendChild(h('a', { href: '/teacher/' }, 'Back')); });
+})();
+</script></body></html>

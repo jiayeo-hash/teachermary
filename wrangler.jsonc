@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "teachermary",
+  "keep_vars": true,
+  // Not secrets: the Access team domain and application tag. Teacher emails are set in the dashboard (TEACHER_EMAILS).
+  "vars": {
+    "ACCESS_TEAM_DOMAIN": "bitter-salad-ac62.cloudflareaccess.com",
+    "ACCESS_AUD": "0e60ca574aef22f15cdb081f9da727a965085ecb49786f55bb0e269891d102b1"
+  },
+  "triggers": { "crons": ["0 16 * * *"] },
+  "main": "src/worker.js",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*", "/l/*"]
+  },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "teachermary", "database_id": "51c4060c-8597-45e6-9fe2-38f21a183986", "migrations_dir": "migrations" }
+  ],
+  "r2_buckets": [
+    { "binding": "FILES", "bucket_name": "teachermary-files" }
+  ]
+}
