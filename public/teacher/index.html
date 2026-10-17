@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Teacher Mary</title>
+<meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/teacher.css">
+<script src="/app.js"></script><script src="/teacher-common.js"></script>
+</head><body>
+<main id="app"><p class="muted">Loading…</p></main>
+<script>
+(function () {
+  var h = TMT.h;
+  TMT.header('Teacher view');
+  var app = document.getElementById('app');
+  function size(b) { return TM.fmtSize(b); }
+  Promise.all([TM.api('/api/teacher/overview'), TM.api('/api/teacher/review-queue'), TM.api('/api/teacher/storage')]).then(function (r) {
+    var classes = r[0].classes, queue = r[1].items, storage = r[2];
+    app.innerHTML = '';
+    app.appendChild(h('div', { class: 'row between' }, [
+      h('div', {}, [h('h1', { style: 'font-size:38px' }, 'Your classes'),
+        h('p', { class: 'muted', style: 'margin:6px 0 0' }, 'One link per lesson. Send it to the parents; students find that lesson\'s reading and hand in that lesson\'s homework.')]),
+      h('a', { class: 'btn sun', href: '/teacher/new/', id: 'new' }, '+ New lesson'),
+    ]));
+
+    if (queue.length) {
+      app.appendChild(h('section', { class: 'card flat', id: 'queue' }, [
+        h('div', { class: 'row' }, [h('h2', { style: 'font-size:22px' }, 'Waiting for your review'), h('span', { class: 'badge' }, queue.length + (queue.length >= 30 ? '+' : ''))]),
+        h('div', { class: 'list' }, queue.map(function (q) {
+          return h('a', { class: 'item', style: 'text-decoration:none;color:inherit', href: '/teacher/class/?id=' + q.classId + '&lesson=' + q.lessonId + '&tab=review' }, [
+            h('span', {}, [h('b', {}, q.studentName), ' · ' + q.className + ' · ' + TMT.dl(q.date)]),
+            h('span', { class: 'muted' }, q.name + ' · ' + TM.ago(q.uploadedAt, 'en')),
+          ]);
+        })),
+      ]));
+    }
+
+    if (!classes.length) {
+      app.appendChild(h('div', { class: 'card flat' }, [h('h2', {}, 'No classes yet'), h('p', { class: 'muted', style: 'margin:0' }, 'Press "New lesson" to create your first class and its first link.')]));
+    }
+    app.appendChild(h('div', { class: 'grid' }, classes.map(function (c) {
+      var n = c.nextLesson;
+      return h('div', { class: 'card', 'data-class': c.name }, [
+        h('div', { class: 'row between' }, [h('h2', { style: 'font-size:24px' }, c.name), c.toReview ? h('span', { class: 'badge' }, c.toReview + ' to review') : null]),
+        h('span', { class: 'muted' }, c.students + ' students'),
+        n ? h('div', { class: 'list' }, [
+          h('div', { class: 'row' }, [h('b', {}, 'Next lesson: ' + TMT.dl(n.date)), TMT.pill(n.status)]),
+          h('div', { class: 'link' }, TM.absUrl(n.link)),
+          h('div', { class: 'row' }, [TMT.copyBtn(n.link), h('a', { class: 'btn small ghost', href: '/teacher/class/?id=' + c.id + '&lesson=' + n.id }, 'Open lesson')]),
+        ]) : h('span', { class: 'muted' }, 'No upcoming lesson yet.'),
+        h('a', { class: 'btn ghost', href: '/teacher/class/?id=' + c.id }, 'Open class'),
+      ]);
+    })));
+    app.appendChild(h('p', { class: 'muted', id: 'storage' }, 'Storage in use: ' + size(storage.totalBytes) + '. Clear old homework from each class page to free space.'));
+  }).catch(function (e) { app.innerHTML = ''; app.appendChild(h('p', {}, 'Could not load: ' + e.message)); });
+})();
+</script></body></html>

@@ -86,6 +86,21 @@ export async function handleTeacher(request, env, url, email, rest) {
     return json({ classes: out });
   }
 
+  // Newest homework that has not been marked as reviewed yet
+  if (a === 'review-queue' && method === 'GET') {
+    const r = await env.DB.prepare(
+      `SELECT sub.id, sub.name, sub.uploaded_at, st.name AS student_name, l.id AS lesson_id, l.lesson_date, c.id AS class_id, c.name AS class_name
+       FROM submissions sub JOIN students st ON st.id = sub.student_id JOIN lessons l ON l.id = sub.lesson_id JOIN classes c ON c.id = l.class_id
+       WHERE sub.reviewed = 0 ORDER BY sub.uploaded_at DESC LIMIT 30`
+    ).all();
+    return json({
+      items: r.results.map((x) => ({
+        id: x.id, name: x.name, uploadedAt: x.uploaded_at, studentName: x.student_name,
+        lessonId: x.lesson_id, date: x.lesson_date, classId: x.class_id, className: x.class_name,
+      })),
+    });
+  }
+
   if (a === 'classes' && !b && method === 'POST') {
     const body = await readJson(request);
     const name = cleanName(body.name, 40);

@@ -130,7 +130,7 @@ check('signed in: sees materials and no homework yet', info1.data.me?.name === '
 // download material with Range
 const matId = info1.data.materials[0].id;
 const full = await fetch(`${BASE}/api/l/${tokenA}/materials/${matId}/file`, { headers: { cookie: linhCookie } });
-check('material download works', full.status === 200 && Number(full.headers.get('content-length')) === 17 * 1024 * 1024 && full.headers.get('content-security-policy').includes('sandbox'));
+check('material download works', full.status === 200 && Number(full.headers.get('content-length')) === 17 * 1024 * 1024 && /script-src 'none'|sandbox/.test(full.headers.get('content-security-policy')));
 await full.arrayBuffer();
 const part = await fetch(`${BASE}/api/l/${tokenA}/materials/${matId}/file`, { headers: { cookie: linhCookie, range: 'bytes=100-199' } });
 const partBytes = new Uint8Array(await part.arrayBuffer());
