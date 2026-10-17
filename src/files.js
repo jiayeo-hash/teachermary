@@ -103,9 +103,11 @@ export async function streamFile(env, request, key, { name, contentType, downloa
     'accept-ranges': 'bytes',
     'cache-control': 'private, no-store',
     'x-content-type-options': 'nosniff',
-    'content-security-policy': "sandbox; default-src 'none'",
     'x-robots-tag': 'noindex, nofollow',
   });
+  // Chrome's built-in PDF viewer will not run inside a CSP sandbox, so PDFs get a
+  // strict policy without it (PDFs cannot run page scripts); everything else stays sandboxed.
+  headers.set('content-security-policy', contentType === 'application/pdf' ? "script-src 'none'" : "sandbox; default-src 'none'");
   const asAttachment = download || !INLINE.has(contentType);
   const safeName = String(name || 'file').replace(/["\\\r\n]/g, '_');
   headers.set(
