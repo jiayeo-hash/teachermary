@@ -131,20 +131,25 @@ Download
 </div>
 <h2 style="margin: 0; font-family: 'Fredoka', sans-serif; font-weight: 600; font-size: 24px">Show us your work</h2>
 </div>
-<sc-if value="{{cur.isCurrent}}" hint-placeholder-val="{{ true }}">
+<sc-if value="{{cur.showUpload}}" hint-placeholder-val="{{ true }}">
 <div style="background: #FFFFFF; border: 3px dashed #7FA6F5; border-radius: 28px; padding: 28px 18px; display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center">
 <div style="width: 76px; height: 76px; border-radius: 50%; background: #E3EDFF; display: flex; align-items: center; justify-content: center">
 <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="#2F6FED" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V5M7 9l5-5 5 5M5 20h14"/></svg>
 </div>
 <span style="font-family: 'Fredoka', sans-serif; font-weight: 600; font-size: 22px">Add your video or file</span>
 <span style="font-size: 16px; color: #5B5F85; line-height: 1.5">A video, a PDF or a Word file. It flies straight to your teacher, so it does not fill up your phone.</span>
-<button style="min-height: 58px; padding: 0 34px; border: 0; border-radius: 20px; background: #1B8350; color: #FFFFFF; font-family: 'Fredoka', sans-serif; font-weight: 600; font-size: 20px; cursor: pointer; box-shadow: 0 5px 0 #11603A">Choose file</button>
+<button onClick="{{choose}}" style="min-height: 58px; padding: 0 34px; border: 0; border-radius: 20px; background: #1B8350; color: #FFFFFF; font-family: 'Fredoka', sans-serif; font-weight: 600; font-size: 20px; cursor: pointer; box-shadow: 0 5px 0 #11603A">Choose file</button>
+<sc-if value="{{cur.isChanging}}" hint-placeholder-val="{{ false }}">
+<button onClick="{{keepOld}}" style="min-height: 48px; padding: 0 18px; border: 0; background: transparent; color: #2F6FED; font-family: 'Nunito', sans-serif; font-weight: 700; font-size: 16px; cursor: pointer">Keep my old file</button>
+</sc-if>
 </div>
 </sc-if>
 <sc-if value="{{cur.isPast}}" hint-placeholder-val="{{ false }}">
 <div style="background: #E8E0FF; border-radius: 22px; padding: 18px; font-size: 16px; color: #23284A; line-height: 1.5">{{cur.label}} is finished, so you cannot add new work here. You can still download the reading and look at your class's work.</div>
 </sc-if>
-<div style="display: flex; align-items: center; gap: 14px; background: #E0F5E9; border: 2px solid #A6E3BF; border-radius: 24px; padding: 16px 18px">
+<sc-if value="{{cur.showCard}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-direction: column; gap: 14px; background: #E0F5E9; border: 2px solid #A6E3BF; border-radius: 24px; padding: 16px 18px">
+<div style="display: flex; align-items: center; gap: 14px">
 <div style="width: 48px; height: 48px; flex: none; border-radius: 50%; background: #FFC93C; display: flex; align-items: center; justify-content: center">
 <svg width="26" height="26" viewBox="0 0 24 24" fill="#23284A" aria-hidden="true"><path d="M12 2l2.9 6.3 6.9.8-5.1 4.7 1.4 6.8L12 17.8 5.9 20.6l1.4-6.8L2.2 9.1l6.9-.8z"/></svg>
 </div>
@@ -153,6 +158,24 @@ Download
 <span style="font-size: 14px; color: #3C5A49">{{cur.myFile}} · {{cur.myWhen}}</span>
 </div>
 </div>
+<sc-if value="{{cur.showActions}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-wrap: wrap; gap: 10px">
+<button onClick="{{startChange}}" style="min-height: 48px; padding: 0 20px; border: 2px solid #1B8350; border-radius: 16px; background: #FFFFFF; color: #1B8350; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 16px; cursor: pointer">Change file</button>
+<button onClick="{{askDelete}}" style="min-height: 48px; padding: 0 20px; border: 2px solid #E3B4B4; border-radius: 16px; background: #FFFFFF; color: #B3261E; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 16px; cursor: pointer">Delete</button>
+</div>
+<span style="font-size: 13px; color: #3C5A49; line-height: 1.5">You can change or delete it until this week closes.</span>
+</sc-if>
+<sc-if value="{{cur.isConfirming}}" hint-placeholder-val="{{ false }}">
+<div style="background: #FFFFFF; border: 2px solid #E3B4B4; border-radius: 18px; padding: 14px; display: flex; flex-direction: column; gap: 10px">
+<span style="font-weight: 700; font-size: 16px">Take {{cur.myFile}} back? Your teacher will not see it any more.</span>
+<div style="display: flex; flex-wrap: wrap; gap: 10px">
+<button onClick="{{confirmDelete}}" style="min-height: 48px; padding: 0 20px; border: 0; border-radius: 16px; background: #B3261E; color: #FFFFFF; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 16px; cursor: pointer">Yes, delete it</button>
+<button onClick="{{cancelDelete}}" style="min-height: 48px; padding: 0 20px; border: 2px solid #C4B48A; border-radius: 16px; background: #FFFFFF; color: #23284A; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 16px; cursor: pointer">No, keep it</button>
+</div>
+</div>
+</sc-if>
+</div>
+</sc-if>
 </section>
 
 </div>
@@ -195,6 +218,7 @@ class Component extends DCLogic {
   renderVals() {
     const st = this.state || {};
     const picked = st.week || 'w6';
+    const mine = st.mine || 'in';
     const tints = ['#FFE3E3', '#E0F5E9', '#E8E0FF', '#FFF0C2'];
     const data = [
       {
@@ -248,13 +272,29 @@ class Component extends DCLogic {
       };
     });
     const found = data.find((w) => w.id === picked) || data[0];
+    const isCur = found.isCurrent;
     const cur = {
       ...found,
-      isPast: !found.isCurrent,
+      myFile: isCur && st.newFile ? st.newFile : found.myFile,
+      myWhen: isCur && st.newFile ? 'just now' : found.myWhen,
+      isPast: !isCur,
+      showUpload: isCur && (mine === 'none' || mine === 'change'),
+      isChanging: isCur && mine === 'change',
+      showCard: !isCur || mine === 'in' || mine === 'confirm',
+      showActions: isCur && mine === 'in',
+      isConfirming: isCur && mine === 'confirm',
       title: found.isCurrent ? 'Hi Linh! Here is this week' : 'Looking back at ' + found.label
     };
     const mates = found.mates.map((m, i) => ({ ...m, bg: tints[i % tints.length] }));
-    return { weeks, cur, material: found.material, mates };
+    return {
+      weeks, cur, material: found.material, mates,
+      choose: () => this.setState({ mine: 'in', newFile: 'my-new-video.mp4' }),
+      keepOld: () => this.setState({ mine: 'in' }),
+      startChange: () => this.setState({ mine: 'change' }),
+      askDelete: () => this.setState({ mine: 'confirm' }),
+      cancelDelete: () => this.setState({ mine: 'in' }),
+      confirmDelete: () => this.setState({ mine: 'none', newFile: null })
+    };
   }
 }
 </script>

@@ -24,9 +24,8 @@ a{color:#2F6FED}a:hover{color:#23284A}
 <div style="min-height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; background: #FFF9EE; font-family: 'Nunito', sans-serif; color: #23284A">
 <header style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 48px; background: #FFFFFF; border-bottom: 1px solid #EBDDBD">
 <div style="display: flex; align-items: center; gap: 12px">
-<div style="width: 40px; height: 40px; border-radius: 16px; background: #2F6FED; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-family: 'Fredoka', sans-serif; font-weight: 700; font-size: 22px">H</div>
-<span style="font-family: 'Fredoka', sans-serif; font-weight: 700; font-size: 22px">Homeroom</span>
-<span style="font-size: 13px; color: #5B5F85; border: 1px solid #EBDDBD; border-radius: 99px; padding: 3px 10px">placeholder name</span>
+<div style="width: 40px; height: 40px; border-radius: 16px; background: #2F6FED; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-family: 'Fredoka', sans-serif; font-weight: 700; font-size: 22px">TM</div>
+<span style="font-family: 'Fredoka', sans-serif; font-weight: 700; font-size: 22px">Teacher Mary</span>
 </div>
 <div style="display: flex; align-items: center; gap: 12px">
 <span style="font-size: 15px; color: #5B5F85">Teacher view</span>
@@ -107,9 +106,9 @@ class Component extends DCLogic {
   renderVals() {
     const copied = (this.state && this.state.copied) || null;
     const base = [
-      { id: 'a', name: 'Class A', schedule: 'Mon & Wed · 7:30 pm', handedIn: '12 of 15 handed in', students: '15 students', pct: '80%', material: 'Week 6 reading and worksheet are up', link: 'homeroom.app/r/mango-7k2' },
-      { id: 'b', name: 'Class B', schedule: 'Tue & Thu · 8:00 pm', handedIn: '9 of 11 handed in', students: '11 students', pct: '82%', material: 'Week 6 reading and worksheet are up', link: 'homeroom.app/r/lotus-4p9' },
-      { id: 'c', name: 'Class C', schedule: 'Fri · 7:00 pm', handedIn: '3 of 8 handed in', students: '8 students', pct: '38%', material: 'Week 6 reading is up, worksheet not yet', link: 'homeroom.app/r/bamboo-8x3' }
+      { id: 'a', name: 'Class A', schedule: 'Mon & Wed · 7:30 pm', handedIn: '12 of 15 handed in', students: '15 students', pct: '80%', material: 'Week 6 reading and worksheet are up', link: 'teachermary.online/r/mango-7k2' },
+      { id: 'b', name: 'Class B', schedule: 'Tue & Thu · 8:00 pm', handedIn: '9 of 11 handed in', students: '11 students', pct: '82%', material: 'Week 6 reading and worksheet are up', link: 'teachermary.online/r/lotus-4p9' },
+      { id: 'c', name: 'Class C', schedule: 'Fri · 7:00 pm', handedIn: '3 of 8 handed in', students: '8 students', pct: '38%', material: 'Week 6 reading is up, worksheet not yet', link: 'teachermary.online/r/bamboo-8x3' }
     ];
     const classes = base.map((c) => ({
       ...c,

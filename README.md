@@ -1,4 +1,4 @@
-# Homeroom mockup
+# Teacher Mary mockup
 
 A clickable mockup of a website where every class gets its own "room":
 the teacher shares one link, students find the weekly reading and hand in
@@ -34,7 +34,7 @@ Create an empty repository on github.com (private is fine), then in this folder:
 ```
 git init
 git add .
-git commit -m "Homeroom mockup"
+git commit -m "Teacher Mary mockup"
 git branch -M main
 git remote add origin https://github.com/YOUR-USER/YOUR-REPO.git
 git push -u origin main
