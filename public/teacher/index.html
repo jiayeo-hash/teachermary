@@ -17,8 +17,8 @@
     app.innerHTML = '';
     app.appendChild(h('div', { class: 'row between' }, [
       h('div', {}, [h('h1', { style: 'font-size:38px' }, 'Your classes'),
-        h('p', { class: 'muted', style: 'margin:6px 0 0' }, 'One link per lesson. Send it to the parents; students find that lesson\'s reading and hand in that lesson\'s homework.')]),
-      h('a', { class: 'btn sun', href: '/teacher/new/', id: 'new' }, '+ New lesson'),
+        h('p', { class: 'muted', style: 'margin:6px 0 0' }, 'Each class has one permanent link. Send it once; students find every lesson\'s reading there and hand in their homework.')]),
+      h('a', { class: 'btn sun', href: '/teacher/new/', id: 'new' }, '+ New class'),
     ]));
 
     if (queue.length) {
@@ -34,19 +34,25 @@
     }
 
     if (!classes.length) {
-      app.appendChild(h('div', { class: 'card flat' }, [h('h2', {}, 'No classes yet'), h('p', { class: 'muted', style: 'margin:0' }, 'Press "New lesson" to create your first class and its first link.')]));
+      app.appendChild(h('div', { class: 'card flat' }, [h('h2', {}, 'No classes yet'), h('p', { class: 'muted', style: 'margin:0' }, 'Press "New class" to create your first class and its link.')]));
     }
     app.appendChild(h('div', { class: 'grid' }, classes.map(function (c) {
       var n = c.nextLesson;
+      var DAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      var sched = c.schedule.length ? c.schedule.map(function (e) { return DAY[e.dow] + (e.time ? ' ' + e.time : ''); }).join(' · ') : 'No weekly schedule yet';
       return h('div', { class: 'card', 'data-class': c.name }, [
         h('div', { class: 'row between' }, [h('h2', { style: 'font-size:24px' }, c.name), c.toReview ? h('span', { class: 'badge' }, c.toReview + ' to review') : null]),
-        h('span', { class: 'muted' }, c.students + ' students'),
-        n ? h('div', { class: 'list' }, [
-          h('div', { class: 'row' }, [h('b', {}, 'Next lesson: ' + TMT.dl(n.date)), TMT.pill(n.status)]),
-          h('div', { class: 'link' }, TM.absUrl(n.link)),
-          h('div', { class: 'row' }, [TMT.copyBtn(n.link), h('a', { class: 'btn small ghost', href: '/teacher/class/?id=' + c.id + '&lesson=' + n.id }, 'Open lesson')]),
-        ]) : h('span', { class: 'muted' }, 'No upcoming lesson yet.'),
-        h('a', { class: 'btn ghost', href: '/teacher/class/?id=' + c.id }, 'Open class'),
+        h('span', { class: 'muted' }, c.students + ' students · ' + sched),
+        h('div', { class: 'list' }, [
+          h('b', {}, 'Class link (same every week)'),
+          h('div', { class: 'link' }, TM.absUrl(c.link)),
+          h('div', { class: 'row' }, [TMT.copyBtn(c.link)]),
+        ]),
+        n ? h('span', { class: 'row' }, [h('span', {}, 'Next lesson: ' + TMT.dl(n.date)), TMT.pill(n.status)]) : h('span', { class: 'muted' }, 'No upcoming lesson yet.'),
+        h('div', { class: 'row' }, [
+          n ? h('a', { class: 'btn small ghost', href: '/teacher/class/?id=' + c.id + '&lesson=' + n.id }, 'Add reading') : null,
+          h('a', { class: 'btn small ghost', href: '/teacher/class/?id=' + c.id }, 'Open class'),
+        ]),
       ]);
     })));
     app.appendChild(h('p', { class: 'muted', id: 'storage' }, 'Storage in use: ' + size(storage.totalBytes) + '. Clear old homework from each class page to free space.'));
