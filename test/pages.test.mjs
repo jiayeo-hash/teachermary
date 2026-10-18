@@ -258,6 +258,11 @@ if (process.argv[1].endsWith('pages.test.mjs')) {
   await sleep(600);
   const sch = await tapi('/api/teacher/classes/' + classId);
   check('class page: schedule can be saved', sch.data.class.schedule.length === 1 && sch.data.class.schedule[0].dow === 3, sch.data.class.schedule);
+  // rename a student
+  pp.w.prompt = () => 'Linh Tran';
+  click(pp.w, pp.w.document.querySelector('#students [data-student="Linh T."] [data-act=rename]'));
+  await sleep(600);
+  check('class page: student can be renamed', (await tapi('/api/teacher/classes/' + classId)).data.roster.some((r) => r.name === 'Linh Tran'));
   // extra lesson
   const pp2 = await openPage(`/teacher/class/?id=${classId}&lesson=${lessonId}`);
   await until(() => !!pp2.w.document.getElementById('extradate'));

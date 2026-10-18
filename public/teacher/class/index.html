@@ -190,6 +190,10 @@
         return h('div', { class: 'item', 'data-student': s.name }, [
           h('span', {}, [s.name, s.hasPin ? h('span', { class: 'muted' }, ' · has PIN') : null]),
           h('span', { class: 'row' }, [
+            h('button', { class: 'btn small ghost', 'data-act': 'rename', onclick: function () {
+              var nm = prompt('Change name:', s.name);
+              if (nm && nm.trim() && nm.trim() !== s.name) act(TM.api('/api/teacher/students/' + s.id, { method: 'PATCH', body: { name: nm.trim() } }), 'Name changed');
+            } }, 'Edit name'),
             h('button', { class: 'btn small ghost', onclick: function () {
               var pin = prompt('New PIN for ' + s.name + ' (4 to 6 numbers):'); if (pin) act(TM.api('/api/teacher/students/' + s.id + '/pin', { method: 'PUT', body: { pin: pin } }), 'PIN saved');
             } }, 'Set PIN'),

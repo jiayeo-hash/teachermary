@@ -265,6 +265,12 @@ const del = await api(`/api/l/${tokenA}/lessons/${lessonA}/submissions/${fid}`, 
 check('student deletes own homework', del.status === 200 && (await api(`/api/l/${tokenA}/lessons/${lessonA}`, { cookie: linhCookie })).data.mine.length === 0);
 check('deleting frees the file in storage', r2Exists(up2.key) === false);
 
+// ---------- rename a student ----------
+const ren = await api(`/api/teacher/students/${minh.id}`, { method: 'PATCH', body: { name: 'Minh An T.' } });
+check('teacher renames a student', ren.status === 200 && (await api(`/api/l/${tokenA}`)).data.students.some((x) => x.id === minh.id && x.name === 'Minh An T.'));
+check('blank name refused', (await api(`/api/teacher/students/${minh.id}`, { method: 'PATCH', body: { name: '  ' } })).status === 400);
+await api(`/api/teacher/students/${minh.id}`, { method: 'PATCH', body: { name: 'Minh A.' } });
+
 // ---------- roster changes ----------
 const minhUp = await upload(UP(lessonA), 'minh.pdf', rand(2000), { cookie: minhCookie });
 check('Minh hands in', minhUp.done?.status === 200);

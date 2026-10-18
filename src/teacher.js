@@ -349,6 +349,15 @@ export async function handleTeacher(request, env, url, email, rest) {
     return json({ ok: true });
   }
 
+  // Rename a student (fixes a typo; keeps their homework and history)
+  if (a === 'students' && b && !c && method === 'PATCH') {
+    const body = await readJson(request);
+    const st = await env.DB.prepare('SELECT id FROM students WHERE id = ?').bind(b).first();
+    if (!st) throw new HttpError(404, 'Student not found');
+    await env.DB.prepare('UPDATE students SET name = ? WHERE id = ?').bind(cleanName(body.name, 40), b).run();
+    return json({ ok: true });
+  }
+
   // ---- student PINs ----
   if (a === 'students' && b && c === 'pin' && method === 'PUT') {
     const body = await readJson(request);
