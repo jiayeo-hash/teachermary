@@ -1,6 +1,6 @@
 // Teacher Mary: one Worker serving the static site plus the API.
 //   /api/teacher/*  -> teacher API (Cloudflare Access + JWT check)
-//   /api/l/:token/* -> student API (lesson link + name + optional PIN)
+//   /api/l/:token/* -> student API (permanent class link + name + optional PIN)
 //   /l/:token       -> the student page
 //   everything else -> static files in /public
 
@@ -9,6 +9,7 @@ import { requireTeacher } from './auth.js';
 import { handleTeacher } from './teacher.js';
 import { handleStudent } from './student.js';
 import { runCleanup } from './cleanup.js';
+import { ensureAllLessons } from './classes.js';
 
 const WRITE = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
@@ -36,7 +37,7 @@ export default {
         throw new HttpError(404, 'Not found');
       }
 
-      // Student page: /l/<token> serves the same page for every lesson.
+      // Student page: /l/<token> serves the same page for every class.
       if (path.startsWith('/l/')) {
         const res = await env.ASSETS.fetch(new Request(new URL('/student/', url), request));
         const h = new Headers(res.headers);
@@ -54,6 +55,11 @@ export default {
     }
   },
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(runCleanup(env).then((r) => console.log('cleanup', JSON.stringify(r))));
+    ctx.waitUntil(
+      ensureAllLessons(env)
+        .then((n) => console.log('lessons created', n))
+        .then(() => runCleanup(env))
+        .then((r) => console.log('cleanup', JSON.stringify(r)))
+    );
   },
 };

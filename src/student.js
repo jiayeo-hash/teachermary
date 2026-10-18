@@ -1,32 +1,46 @@
 // Student-facing API: everything under /api/l/:token/...
-// The token in the link identifies the lesson. A student then picks their name
-// (and enters a PIN if one is set) to get a session cookie.
+// The token in the link identifies the class (one permanent link per class). A student then
+// picks their name (and enters a PIN if one is set) to get a session cookie.
 
 import { HttpError, json, readJson, uuid } from './util.js';
+import { effectiveStatus, readSchedule, todayIn } from './classes.js';
 import { clearSessionCookie, createStudentSession, getStudentSession } from './auth.js';
 import { abortUpload, completeUpload, deleteKeys, startUpload, streamFile, uploadPart } from './files.js';
 
-async function loadLesson(env, token) {
-  if (typeof token !== 'string' || token.length < 20 || token.length > 100) throw new HttpError(404, 'Lesson not found');
-  const lesson = await env.DB.prepare(
-    `SELECT l.id, l.class_id, l.lesson_date, l.status, c.name AS class_name
-     FROM lessons l JOIN classes c ON c.id = l.class_id
-     WHERE l.token = ? AND l.status != 'draft'`
-  )
-    .bind(token)
-    .first();
-  if (!lesson) throw new HttpError(404, 'Lesson not found');
-  return lesson;
+async function loadClass(env, token) {
+  if (typeof token !== 'string' || token.length < 20 || token.length > 100) throw new HttpError(404, 'Class not found');
+  let cls = await env.DB.prepare('SELECT id, name, schedule, multi, auto_close_days FROM classes WHERE token = ?').bind(token).first();
+  if (!cls) {
+    // Links made before classes had one permanent link still open that class.
+    cls = await env.DB.prepare(
+      `SELECT c.id, c.name, c.schedule, c.multi, c.auto_close_days FROM lessons l JOIN classes c ON c.id = l.class_id WHERE l.token = ?`
+    )
+      .bind(token)
+      .first();
+  }
+  if (!cls) throw new HttpError(404, 'Class not found');
+  return cls;
 }
 
-async function requireStudent(request, env, lesson) {
-  const s = await getStudentSession(request, env, lesson.id);
+const VISIBLE = `l.class_id = ? AND l.status != 'draft' AND (l.lesson_date <= ? OR EXISTS (SELECT 1 FROM materials m WHERE m.lesson_id = l.id))`;
+const MAX_FILES = 10;
+
+async function requireStudent(request, env, cls, today) {
+  const s = await getStudentSession(request, env, cls.id, today);
   if (!s) throw new HttpError(401, 'Pick your name first');
   return s;
 }
 
-function requireOpen(lesson) {
-  if (lesson.status !== 'open') throw new HttpError(409, 'This lesson is closed, so work cannot be changed.');
+async function visibleLesson(env, cls, lessonId, today) {
+  const l = await env.DB.prepare(`SELECT l.id, l.lesson_date, l.status FROM lessons l WHERE l.id = ? AND ${VISIBLE.replace('l.class_id = ?', 'l.class_id = ?')}`)
+    .bind(String(lessonId || ''), cls.id, today)
+    .first();
+  if (!l) throw new HttpError(404, 'Lesson not found');
+  return l;
+}
+
+function requireOpen(lesson, cls, today) {
+  if (effectiveStatus(lesson, cls, today) !== 'open') throw new HttpError(409, 'This lesson is closed, so work cannot be changed.');
 }
 
 async function hashPin(pin, salt) {
@@ -58,44 +72,41 @@ const submissionOut = (r) => ({
 
 export async function handleStudent(request, env, url, token, rest) {
   const method = request.method;
-  const lesson = await loadLesson(env, token);
-  const prefixFor = (studentId) => `submissions/${lesson.id}/${studentId}`;
+  const cls = await loadClass(env, token);
+  const today = todayIn(env);
 
-  // GET /api/l/:token  -> lesson info, roster, and (if signed in) own + class work
+  // GET /api/l/:token  -> class info, roster, and (if signed in) the lesson list
   if (rest.length === 0 && method === 'GET') {
     const students = await env.DB.prepare(
       `SELECT id, name, color, pin_hash IS NOT NULL AS has_pin FROM students
-       WHERE class_id = ? AND added_on <= ? AND (left_on IS NULL OR left_on > ?)
-       ORDER BY rowid`
+       WHERE class_id = ? AND added_on <= ? AND (left_on IS NULL OR left_on > ?) ORDER BY rowid`
     )
-      .bind(lesson.class_id, lesson.lesson_date, lesson.lesson_date)
+      .bind(cls.id, today, today)
       .all();
     const out = {
-      className: lesson.class_name,
-      date: lesson.lesson_date,
-      status: lesson.status,
+      className: cls.name,
+      today,
+      multi: !!cls.multi,
+      maxFiles: MAX_FILES,
+      schedule: readSchedule(cls),
       students: students.results.map((s) => ({ id: s.id, name: s.name, color: s.color, hasPin: !!s.has_pin })),
       me: null,
     };
-    const sess = await getStudentSession(request, env, lesson.id);
-    if (sess) {
-      const me = out.students.find((s) => s.id === sess.studentId);
-      if (me) {
-        out.me = { id: me.id, name: me.name };
-        const mats = await env.DB.prepare('SELECT id, name, size_bytes, content_type FROM materials WHERE lesson_id = ? ORDER BY created_at').bind(lesson.id).all();
-        out.materials = mats.results.map((m) => ({ id: m.id, name: m.name, size: m.size_bytes, contentType: m.content_type }));
-        const subs = await env.DB.prepare(
-          `SELECT sub.*, st.name AS student_name FROM submissions sub JOIN students st ON st.id = sub.student_id
-           WHERE sub.lesson_id = ? ORDER BY sub.uploaded_at DESC`
-        )
-          .bind(lesson.id)
-          .all();
-        const mine = subs.results.find((r) => r.student_id === me.id);
-        out.mine = mine ? { ...submissionOut(mine), reviewed: !!mine.reviewed, feedback: mine.reviewed ? mine.feedback : null } : null;
-        out.classwork = subs.results
-          .filter((r) => r.student_id !== me.id)
-          .map((r) => ({ ...submissionOut(r), studentName: r.student_name }));
-      }
+    const sess = await getStudentSession(request, env, cls.id, today);
+    const me = sess && out.students.find((s) => s.id === sess.studentId);
+    if (me) {
+      out.me = { id: me.id, name: me.name };
+      const rows = await env.DB.prepare(
+        `SELECT l.id, l.lesson_date, l.status,
+           (SELECT COUNT(*) FROM materials m WHERE m.lesson_id = l.id) AS materials,
+           (SELECT COUNT(*) FROM submissions s WHERE s.lesson_id = l.id AND s.student_id = ?) AS mine
+         FROM lessons l WHERE ${VISIBLE} ORDER BY l.lesson_date DESC, l.created_at DESC`
+      )
+        .bind(me.id, cls.id, today)
+        .all();
+      out.lessons = rows.results.map((l) => ({
+        id: l.id, date: l.lesson_date, status: effectiveStatus(l, cls, today), materials: l.materials, mine: l.mine,
+      }));
     }
     return json(out);
   }
@@ -107,7 +118,7 @@ export async function handleStudent(request, env, url, token, rest) {
       `SELECT id, pin_hash, pin_fails, locked_until FROM students
        WHERE id = ? AND class_id = ? AND added_on <= ? AND (left_on IS NULL OR left_on > ?)`
     )
-      .bind(String(body.studentId || ''), lesson.class_id, lesson.lesson_date, lesson.lesson_date)
+      .bind(String(body.studentId || ''), cls.id, today, today)
       .first();
     if (!st) throw new HttpError(404, 'Student not found');
     const now = new Date().toISOString();
@@ -127,77 +138,121 @@ export async function handleStudent(request, env, url, token, rest) {
       }
       await env.DB.prepare('UPDATE students SET pin_fails = 0, locked_until = NULL WHERE id = ?').bind(st.id).run();
     }
-    const cookie = await createStudentSession(env, st.id, lesson.id, url);
+    const cookie = await createStudentSession(env, st.id, cls.id, url);
     return json({ ok: true }, 200, { 'set-cookie': cookie });
   }
 
   if (rest[0] === 'logout' && method === 'POST') {
-    const sess = await getStudentSession(request, env, lesson.id);
+    const sess = await getStudentSession(request, env, cls.id, today);
     if (sess) await env.DB.prepare('DELETE FROM student_sessions WHERE token_hash = ?').bind(sess.tokenHash).run();
     return json({ ok: true }, 200, { 'set-cookie': clearSessionCookie(url) });
   }
 
   // From here on a signed-in student is required.
-  const sess = await requireStudent(request, env, lesson);
+  const sess = await requireStudent(request, env, cls, today);
+
+  // GET /api/l/:token/lessons/:id  -> reading, my files, classmates' files
+  if (rest[0] === 'lessons' && rest[1] && rest.length === 2 && method === 'GET') {
+    const lesson = await visibleLesson(env, cls, rest[1], today);
+    const mats = await env.DB.prepare('SELECT id, name, size_bytes, content_type FROM materials WHERE lesson_id = ? ORDER BY created_at').bind(lesson.id).all();
+    const subs = await env.DB.prepare(
+      `SELECT sub.*, st.name AS student_name FROM submissions sub JOIN students st ON st.id = sub.student_id
+       WHERE sub.lesson_id = ? ORDER BY sub.uploaded_at DESC`
+    )
+      .bind(lesson.id)
+      .all();
+    return json({
+      id: lesson.id,
+      date: lesson.lesson_date,
+      status: effectiveStatus(lesson, cls, today),
+      materials: mats.results.map((m) => ({ id: m.id, name: m.name, size: m.size_bytes, contentType: m.content_type })),
+      mine: subs.results
+        .filter((r) => r.student_id === sess.studentId)
+        .map((r) => ({ ...submissionOut(r), reviewed: !!r.reviewed, feedback: r.reviewed ? r.feedback : null })),
+      classwork: subs.results
+        .filter((r) => r.student_id !== sess.studentId)
+        .map((r) => ({ ...submissionOut(r), studentName: r.student_name })),
+    });
+  }
 
   // GET /api/l/:token/materials/:id/file
   if (rest[0] === 'materials' && rest[2] === 'file' && method === 'GET') {
-    const m = await env.DB.prepare('SELECT r2_key, name, content_type FROM materials WHERE id = ? AND lesson_id = ?').bind(rest[1], lesson.id).first();
+    const m = await env.DB.prepare(
+      `SELECT m.r2_key, m.name, m.content_type FROM materials m JOIN lessons l ON l.id = m.lesson_id
+       WHERE m.id = ? AND ${VISIBLE}`
+    )
+      .bind(rest[1], cls.id, today)
+      .first();
     if (!m) throw new HttpError(404, 'File not found');
     return streamFile(env, request, m.r2_key, { name: m.name, contentType: m.content_type, download: url.searchParams.has('download') });
   }
 
-  // GET /api/l/:token/submissions/:id/file  (own or classmates', same lesson only)
+  // GET /api/l/:token/submissions/:id/file  (own or classmates', same class)
   if (rest[0] === 'submissions' && rest[2] === 'file' && method === 'GET') {
-    const s = await env.DB.prepare('SELECT r2_key, name, content_type FROM submissions WHERE id = ? AND lesson_id = ?').bind(rest[1], lesson.id).first();
+    const s = await env.DB.prepare(
+      `SELECT sub.r2_key, sub.name, sub.content_type FROM submissions sub JOIN lessons l ON l.id = sub.lesson_id
+       WHERE sub.id = ? AND ${VISIBLE}`
+    )
+      .bind(rest[1], cls.id, today)
+      .first();
     if (!s) throw new HttpError(404, 'File not found');
     return streamFile(env, request, s.r2_key, { name: s.name, contentType: s.content_type, download: url.searchParams.has('download') });
   }
 
-  // Uploads: start / part / complete / abort
-  if (rest[0] === 'upload') {
-    requireOpen(lesson);
-    const prefix = prefixFor(sess.studentId);
-    if (rest[1] === 'start' && method === 'POST') {
-      const b = await readJson(request);
-      return json(await startUpload(env, prefix, b.filename, Number(b.size)));
+  // Everything below changes one lesson: /api/l/:token/lessons/:lessonId/...
+  if (rest[0] === 'lessons' && rest[1]) {
+    const lesson = await visibleLesson(env, cls, rest[1], today);
+    const prefix = `submissions/${lesson.id}/${sess.studentId}`;
+
+    // Uploads: upload/start | part | complete | abort
+    if (rest[2] === 'upload') {
+      requireOpen(lesson, cls, today);
+      if (rest[3] === 'start' && method === 'POST') {
+        if (cls.multi) {
+          const n = await env.DB.prepare('SELECT COUNT(*) AS n FROM submissions WHERE lesson_id = ? AND student_id = ?').bind(lesson.id, sess.studentId).first();
+          if (n.n >= MAX_FILES) throw new HttpError(409, `You can hand in up to ${MAX_FILES} files. Delete one to add another.`);
+        }
+        const b = await readJson(request);
+        return json(await startUpload(env, prefix, b.filename, Number(b.size)));
+      }
+      if (rest[3] === 'part' && method === 'PUT') return json(await uploadPart(env, request, prefix, url));
+      if (rest[3] === 'abort' && method === 'POST') {
+        await abortUpload(env, prefix, await readJson(request));
+        return json({ ok: true });
+      }
+      if (rest[3] === 'complete' && method === 'POST') {
+        const f = await completeUpload(env, prefix, await readJson(request));
+        let replaced = false;
+        if (!cls.multi) {
+          // one file per lesson: the new file replaces any earlier one
+          const old = await env.DB.prepare('SELECT id, r2_key FROM submissions WHERE lesson_id = ? AND student_id = ?').bind(lesson.id, sess.studentId).all();
+          if (old.results.length) {
+            replaced = true;
+            await env.DB.batch(old.results.map((o) => env.DB.prepare('DELETE FROM submissions WHERE id = ?').bind(o.id)));
+            await deleteKeys(env, old.results.map((o) => o.r2_key));
+          }
+        }
+        await env.DB.prepare(
+          'INSERT INTO submissions (id, lesson_id, student_id, name, r2_key, size_bytes, content_type, replaced_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        )
+          .bind(uuid(), lesson.id, sess.studentId, f.name, f.key, f.size, f.contentType, replaced ? new Date().toISOString().slice(0, 19).replace('T', ' ') : null)
+          .run();
+        return json({ ok: true, replaced });
+      }
     }
-    if (rest[1] === 'part' && method === 'PUT') return json(await uploadPart(env, request, prefix, url));
-    if (rest[1] === 'abort' && method === 'POST') {
-      await abortUpload(env, prefix, await readJson(request));
+
+    // DELETE /api/l/:token/lessons/:lessonId/submissions/:id  (own files only)
+    if (rest[2] === 'submissions' && rest[3] && method === 'DELETE') {
+      requireOpen(lesson, cls, today);
+      const old = await env.DB.prepare('SELECT id, r2_key FROM submissions WHERE id = ? AND lesson_id = ? AND student_id = ?')
+        .bind(rest[3], lesson.id, sess.studentId)
+        .first();
+      if (old) {
+        await env.DB.prepare('DELETE FROM submissions WHERE id = ?').bind(old.id).run();
+        await deleteKeys(env, [old.r2_key]);
+      }
       return json({ ok: true });
     }
-    if (rest[1] === 'complete' && method === 'POST') {
-      const f = await completeUpload(env, prefix, await readJson(request));
-      const old = await env.DB.prepare('SELECT id, r2_key FROM submissions WHERE lesson_id = ? AND student_id = ?').bind(lesson.id, sess.studentId).first();
-      if (old) {
-        await env.DB.prepare(
-          `UPDATE submissions SET name = ?, r2_key = ?, size_bytes = ?, content_type = ?, uploaded_at = datetime('now'),
-           replaced_at = datetime('now'), reviewed = 0, feedback = NULL WHERE id = ?`
-        )
-          .bind(f.name, f.key, f.size, f.contentType, old.id)
-          .run();
-        await deleteKeys(env, [old.r2_key]);
-      } else {
-        await env.DB.prepare(
-          'INSERT INTO submissions (id, lesson_id, student_id, name, r2_key, size_bytes, content_type) VALUES (?, ?, ?, ?, ?, ?, ?)'
-        )
-          .bind(uuid(), lesson.id, sess.studentId, f.name, f.key, f.size, f.contentType)
-          .run();
-      }
-      return json({ ok: true, replaced: !!old });
-    }
-  }
-
-  // DELETE /api/l/:token/submission
-  if (rest[0] === 'submission' && method === 'DELETE') {
-    requireOpen(lesson);
-    const old = await env.DB.prepare('SELECT id, r2_key FROM submissions WHERE lesson_id = ? AND student_id = ?').bind(lesson.id, sess.studentId).first();
-    if (old) {
-      await env.DB.prepare('DELETE FROM submissions WHERE id = ?').bind(old.id).run();
-      await deleteKeys(env, [old.r2_key]);
-    }
-    return json({ ok: true });
   }
 
   throw new HttpError(404, 'Not found');

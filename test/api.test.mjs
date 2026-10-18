@@ -61,23 +61,46 @@ async function upload(base, filename, bytes, { cookie, completeExtra = {} } = {}
 const rand = (n) => { const b = new Uint8Array(n); for (let i = 0; i < n; i += 65536) crypto.getRandomValues(b.subarray(i, Math.min(i + 65536, n))); return b; };
 
 // ---------- teacher: set up ----------
+const sydToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+const addD = (iso, n) => { const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+const dow = (iso) => new Date(iso + 'T00:00:00Z').getUTCDay();
+const today = sydToday();
+
 const me = await api('/api/teacher/me');
 check('teacher /me works (dev login)', me.status === 200 && me.data.email);
 
-const cA = await api('/api/teacher/classes', { method: 'POST', body: { name: 'Class A', students: ['Linh T.', 'Minh A.', 'An P.'] } });
-check('create class A', cA.status === 201, cA);
-const cB = await api('/api/teacher/classes', { method: 'POST', body: { name: 'Class B', students: ['Hà P.'] } });
+// ---------- recurring class ----------
+const cA = await api('/api/teacher/classes', {
+  method: 'POST',
+  body: { name: 'Class A', students: ['Linh T.', 'Minh A.', 'An P.'], schedule: [{ dow: 2, time: '19:00' }, { dow: 6, time: '19:00' }] },
+});
+check('create class A with a Tue + Sat schedule', cA.status === 201 && /^\/l\/[A-Za-z0-9_-]{30,}$/.test(cA.data.link) && cA.data.lessonsCreated >= 4, cA.data);
 const classA = cA.data.id;
+const tokenA = cA.data.link.split('/')[2];
+let clsA = await api(`/api/teacher/classes/${classA}`);
+check('lessons were made only on Tue and Sat, within 2 weeks', clsA.data.lessons.length === cA.data.lessonsCreated && clsA.data.lessons.every((l) => [2, 6].includes(dow(l.date)) && l.date <= addD(today, 14) && l.date >= today && l.auto), clsA.data.lessons.map((l) => l.date));
+check('class link is permanent and shown on the class', clsA.data.class.link === cA.data.link);
+const n0 = clsA.data.lessons.length;
+clsA = await api(`/api/teacher/classes/${classA}`);
+check('opening the class again does not duplicate lessons', clsA.data.lessons.length === n0);
+const gone = clsA.data.lessons[0];
+await api(`/api/teacher/lessons/${gone.id}`, { method: 'DELETE' });
+clsA = await api(`/api/teacher/classes/${classA}`);
+check('a lesson Mary deleted (day off) does not come back', clsA.data.lessons.length === n0 - 1 && !clsA.data.lessons.some((l) => l.date === gone.date));
+const sat = await api(`/api/teacher/classes/${classA}`, { method: 'PATCH', body: { schedule: [{ dow: 2, time: '19:00' }] } });
+clsA = await api(`/api/teacher/classes/${classA}`);
+check('dropping Saturday removes its empty future lessons', sat.status === 200 && clsA.data.lessons.every((l) => dow(l.date) === 2), clsA.data.lessons.map((l) => l.date));
+await api(`/api/teacher/classes/${classA}`, { method: 'PATCH', body: { schedule: [{ dow: 2, time: '19:00' }, { dow: 6, time: '19:00' }] } });
+clsA = await api(`/api/teacher/classes/${classA}`);
+check('adding Saturday back creates them again', clsA.data.lessons.some((l) => dow(l.date) === 6));
+check('bad schedule refused', (await api(`/api/teacher/classes/${classA}`, { method: 'PATCH', body: { schedule: [{ dow: 9, time: '19:00' }] } })).status === 400);
 
-const day = (offset) => new Date(Date.now() + offset * 86400000).toISOString().slice(0, 10);
-const L1 = await api(`/api/teacher/classes/${classA}/lessons`, { method: 'POST', body: { date: day(1) } });
-check('create lesson, returns unguessable link', L1.status === 201 && /^\/l\/[A-Za-z0-9_-]{30,}$/.test(L1.data.link), L1.data);
+// A one-off (replacement) lesson yesterday, so students can see it; plus a future one without reading
+const L1 = await api(`/api/teacher/classes/${classA}/lessons`, { method: 'POST', body: { date: addD(today, -1) } });
+check('extra lesson on another date', L1.status === 201, L1.data);
 const lessonA = L1.data.id;
-const tokenA = L1.data.link.split('/')[2];
-check('lesson roster has 3 students', L1.data.roster.length === 3);
-
-const L2 = await api(`/api/teacher/classes/${cB.data.id}/lessons`, { method: 'POST', body: { date: day(1) } });
-const tokenB = L2.data.link.split('/')[2];
+const future = await api(`/api/teacher/classes/${classA}/lessons`, { method: 'POST', body: { date: addD(today, 20) } });
+const draft = await api(`/api/teacher/classes/${classA}/lessons`, { method: 'POST', body: { date: addD(today, -2), status: 'draft' } });
 
 // materials: 17 MB file => 3 parts
 const mat = await upload(`/api/teacher/lessons/${lessonA}/materials/upload`, 'Reading.pdf', rand(17 * 1024 * 1024));
@@ -87,22 +110,22 @@ check('html upload is refused', bad.start?.status === 415, bad.start?.data);
 const bigLie = await api(`/api/teacher/lessons/${lessonA}/materials/upload/start`, { method: 'POST', body: { filename: 'a.mp4', size: 5 * 1024 ** 3 } });
 check('over 1 GB refused', bigLie.status === 413);
 
+const cB = await api('/api/teacher/classes', { method: 'POST', body: { name: 'Class B', students: ['Hà P.'] } });
+const tokenB = cB.data.link.split('/')[2];
+check('every class has its own link', tokenA !== tokenB);
+
 // ---------- origin / csrf ----------
 const cross = await api('/api/teacher/classes', { method: 'POST', body: { name: 'x' }, headers: { origin: 'https://evil.example' } });
 check('cross-origin write refused', cross.status === 403);
 
 // ---------- student ----------
 const info0 = await api(`/api/l/${tokenA}`);
-check('student link shows class + roster, no files before sign-in', info0.status === 200 && info0.data.students.length === 3 && !info0.data.materials && !info0.data.me, info0.data);
+check('class link shows class + roster, no lessons before sign-in', info0.status === 200 && info0.data.students.length === 3 && !info0.data.lessons && !info0.data.me, info0.data);
 check('bad token is 404', (await api('/api/l/' + 'x'.repeat(40))).status === 404);
-check('draft lesson hidden', await (async () => {
-  const d = await api(`/api/teacher/classes/${classA}/lessons`, { method: 'POST', body: { date: day(2), status: 'draft' } });
-  return (await api(`/api/l/${d.data.link.split('/')[2]}`)).status === 404;
-})());
 
 const linh = info0.data.students.find((s) => s.name === 'Linh T.');
 const minh = info0.data.students.find((s) => s.name === 'Minh A.');
-check('no access without name', (await api(`/api/l/${tokenA}/materials/${'x'}/file`)).status === 401);
+check('no access without name', (await api(`/api/l/${tokenA}/lessons/${lessonA}`)).status === 401);
 
 // PIN
 const pinSet = await api(`/api/teacher/students/${linh.id}/pin`, { method: 'PUT', body: { pin: '4821' } });
@@ -111,24 +134,33 @@ check('PIN must be digits', (await api(`/api/teacher/students/${linh.id}/pin`, {
 check('roster shows hasPin', (await api(`/api/l/${tokenA}`)).data.students.find((s) => s.id === linh.id).hasPin === true);
 const wrong = await api(`/api/l/${tokenA}/login`, { method: 'POST', body: { studentId: linh.id, pin: '0000' } });
 check('wrong PIN rejected', wrong.status === 401);
-let locked;
-for (let i = 0; i < 5; i++) locked = await api(`/api/l/${tokenA}/login`, { method: 'POST', body: { studentId: linh.id, pin: '1111' } });
+for (let i = 0; i < 5; i++) await api(`/api/l/${tokenA}/login`, { method: 'POST', body: { studentId: linh.id, pin: '1111' } });
 const afterLock = await api(`/api/l/${tokenA}/login`, { method: 'POST', body: { studentId: linh.id, pin: '4821' } });
 check('5 wrong PINs lock the student out (even the right PIN)', afterLock.status === 429, afterLock.data);
-await api(`/api/teacher/students/${linh.id}/pin`, { method: 'PUT', body: { pin: '4821' } }); // teacher reset clears lock
+await api(`/api/teacher/students/${linh.id}/pin`, { method: 'PUT', body: { pin: '4821' } });
 const good = await api(`/api/l/${tokenA}/login`, { method: 'POST', body: { studentId: linh.id, pin: '4821' } });
 check('right PIN signs in and sets HttpOnly cookie', good.status === 200 && good.res.headers.get('set-cookie').includes('HttpOnly'), good.data);
 const linhCookie = good.cookie;
-
 const minhLogin = await api(`/api/l/${tokenA}/login`, { method: 'POST', body: { studentId: minh.id } });
 check('student without PIN signs in by name', minhLogin.status === 200);
 const minhCookie = minhLogin.cookie;
 
 const info1 = await api(`/api/l/${tokenA}`, { cookie: linhCookie });
-check('signed in: sees materials and no homework yet', info1.data.me?.name === 'Linh T.' && info1.data.materials.length === 1 && info1.data.mine === null, info1.data);
+const ids1 = info1.data.lessons?.map((l) => l.id) || [];
+check('signed in: sees the past lesson with reading', info1.data.me?.name === 'Linh T.' && ids1.includes(lessonA) && info1.data.lessons.find((l) => l.id === lessonA).materials === 1, info1.data.lessons);
+check('lessons are newest first', info1.data.lessons.every((l, i, a) => i === 0 || a[i - 1].date >= l.date));
+check('draft lessons are hidden', !ids1.includes(draft.data.id));
+check('future lesson with no reading is hidden', !ids1.includes(future.data.id));
+check('the 2-week auto lessons without reading are hidden', info1.data.lessons.every((l) => l.date <= today || l.materials > 0));
+await upload(`/api/teacher/lessons/${future.data.id}/materials/upload`, 'Next week.pdf', rand(500));
+check('future lesson appears once reading is added', (await api(`/api/l/${tokenA}`, { cookie: linhCookie })).data.lessons.some((l) => l.id === future.data.id));
+check('draft lesson cannot be opened by id', (await api(`/api/l/${tokenA}/lessons/${draft.data.id}`, { cookie: linhCookie })).status === 404);
+
+const det = await api(`/api/l/${tokenA}/lessons/${lessonA}`, { cookie: linhCookie });
+check('lesson detail has reading, no homework yet', det.data.materials.length === 1 && det.data.mine.length === 0 && det.data.status === 'open', det.data);
 
 // download material with Range
-const matId = info1.data.materials[0].id;
+const matId = det.data.materials[0].id;
 const full = await fetch(`${BASE}/api/l/${tokenA}/materials/${matId}/file`, { headers: { cookie: linhCookie } });
 check('material download works', full.status === 200 && Number(full.headers.get('content-length')) === 17 * 1024 * 1024 && /script-src 'none'|sandbox/.test(full.headers.get('content-security-policy')));
 await full.arrayBuffer();
@@ -140,24 +172,46 @@ check('suffix range works', suffix.status === 206 && (await suffix.arrayBuffer()
 const badRange = await fetch(`${BASE}/api/l/${tokenA}/materials/${matId}/file`, { headers: { cookie: linhCookie, range: 'bytes=99999999999-' } });
 check('out of range gives 416', badRange.status === 416);
 
-// homework upload
+// homework upload (one file per lesson by default)
+const UP = (lid) => `/api/l/${tokenA}/lessons/${lid}/upload`;
 const video = rand(9 * 1024 * 1024);
-const up = await upload(`/api/l/${tokenA}/upload`, 'speaking.mp4', video, { cookie: linhCookie });
+const up = await upload(UP(lessonA), 'speaking.mp4', video, { cookie: linhCookie });
 check('student uploads 9 MB video (2 chunks)', up.done?.status === 200 && up.done.data.replaced === false, up.done || up);
-const info2 = await api(`/api/l/${tokenA}`, { cookie: linhCookie });
-check('own homework shown', info2.data.mine?.name === 'speaking.mp4', info2.data.mine);
+const up2 = await upload(UP(lessonA), 'speaking2.mp4', rand(1024 * 1024), { cookie: linhCookie });
+check('single-file class: new upload replaces the old one', up2.done?.status === 200 && up2.done.data.replaced === true, up2.done);
+const d2 = await api(`/api/l/${tokenA}/lessons/${lessonA}`, { cookie: linhCookie });
+check('only the new file is listed', d2.data.mine.length === 1 && d2.data.mine[0].name === 'speaking2.mp4' && d2.data.mine[0].replacedAt);
+check('replaced file is deleted from storage, new one kept', r2Exists(up.key) === false && r2Exists(up2.key) === true);
 
-const up2 = await upload(`/api/l/${tokenA}/upload`, 'speaking2.mp4', rand(1024 * 1024), { cookie: linhCookie });
-check('student replaces file', up2.done?.status === 200 && up2.done.data.replaced === true, up2.done);
-const info3 = await api(`/api/l/${tokenA}`, { cookie: linhCookie });
-check('only one submission, new name, replacedAt set', info3.data.mine.name === 'speaking2.mp4' && info3.data.mine.replacedAt);
-check('replaced file is deleted from storage, new one kept', r2Exists(up.key) === false && r2Exists(up2.key) === true, { old: r2Exists(up.key), new: r2Exists(up2.key) });
+// multiple files switched on by Mary
+const on = await api(`/api/teacher/classes/${classA}`, { method: 'PATCH', body: { multi: true } });
+check('teacher turns on several files', on.status === 200 && (await api(`/api/l/${tokenA}`)).data.multi === true);
+const up3 = await upload(UP(lessonA), 'page2.pdf', rand(2000), { cookie: linhCookie });
+const d3 = await api(`/api/l/${tokenA}/lessons/${lessonA}`, { cookie: linhCookie });
+check('several files: second file is added, first kept', up3.done?.status === 200 && d3.data.mine.length === 2 && r2Exists(up2.key), d3.data.mine);
+const keys = [up2.key, up3.key];
+for (let i = 0; i < 8; i++) { const u = await upload(UP(lessonA), `extra${i}.pdf`, rand(100), { cookie: linhCookie }); keys.push(u.key); }
+const over = await api(`${UP(lessonA)}/start`, { method: 'POST', body: { filename: 'one-too-many.pdf', size: 10 }, cookie: linhCookie });
+check('a student can hand in at most 10 files per lesson', over.status === 409, over.data);
+const d4 = await api(`/api/l/${tokenA}/lessons/${lessonA}`, { cookie: linhCookie });
+check('10 files stored', d4.data.mine.length === 10);
+
+// delete one of several; cannot delete someone else's
+const victim = d4.data.mine.find((m) => m.name === 'page2.pdf');
+const minhTry = await api(`/api/l/${tokenA}/lessons/${lessonA}/submissions/${victim.id}`, { method: 'DELETE', cookie: minhCookie });
+check("a classmate cannot delete someone else's file", (await api(`/api/l/${tokenA}/lessons/${lessonA}`, { cookie: linhCookie })).data.mine.length === 10, minhTry.status);
+const del1 = await api(`/api/l/${tokenA}/lessons/${lessonA}/submissions/${victim.id}`, { method: 'DELETE', cookie: linhCookie });
+check('student deletes one of their files; its storage is freed', del1.status === 200 && r2Exists(up3.key) === false && r2Exists(up2.key) === true);
+for (const m of (await api(`/api/l/${tokenA}/lessons/${lessonA}`, { cookie: linhCookie })).data.mine.filter((m) => m.name !== 'speaking2.mp4')) {
+  await api(`/api/l/${tokenA}/lessons/${lessonA}/submissions/${m.id}`, { method: 'DELETE', cookie: linhCookie });
+}
+await api(`/api/teacher/classes/${classA}`, { method: 'PATCH', body: { multi: false } });
 const oldGone = await api(`/api/teacher/lessons/${lessonA}`);
 check('teacher sees 1 submission, Minh & An not handed in', oldGone.data.submissions.length === 1 && oldGone.data.notHandedIn.join() === 'Minh A.,An P.', oldGone.data.notHandedIn);
 
 // classmates can see work in same lesson, not feedback
-const minhView = await api(`/api/l/${tokenA}`, { cookie: minhCookie });
-check('classmate sees Linh\'s work in class work', minhView.data.classwork.length === 1 && minhView.data.classwork[0].studentName === 'Linh T.');
+const minhView = await api(`/api/l/${tokenA}/lessons/${lessonA}`, { cookie: minhCookie });
+check("classmate sees Linh's work in class work", minhView.data.classwork.length === 1 && minhView.data.classwork[0].studentName === 'Linh T.');
 const subId = minhView.data.classwork[0].id;
 const peek = await fetch(`${BASE}/api/l/${tokenA}/submissions/${subId}/file`, { headers: { cookie: minhCookie } });
 check('classmate can play it', peek.status === 200 && peek.headers.get('content-type') === 'video/mp4');
@@ -165,15 +219,15 @@ await peek.arrayBuffer();
 
 // other class cannot see it
 const crossClass = await api(`/api/l/${tokenB}`, { cookie: minhCookie });
-check('class A student has no session in class B lesson', crossClass.status === 200 && crossClass.data.me === null && !crossClass.data.classwork);
+check('class A student has no session in class B', crossClass.status === 200 && crossClass.data.me === null && !crossClass.data.lessons);
 const crossFile = await api(`/api/l/${tokenB}/submissions/${subId}/file`, { cookie: minhCookie });
 check('class B cannot fetch class A homework by id', crossFile.status === 401 || crossFile.status === 404, crossFile.status);
-const crossUpload = await api(`/api/l/${tokenB}/upload/start`, { method: 'POST', body: { filename: 'a.pdf', size: 10 }, cookie: minhCookie });
-check('class A student cannot upload into class B lesson', crossUpload.status === 401);
+const crossUpload = await api(`/api/l/${tokenB}/lessons/${lessonA}/upload/start`, { method: 'POST', body: { filename: 'a.pdf', size: 10 }, cookie: minhCookie });
+check('class A student cannot upload into class B', crossUpload.status === 401);
 
 // student can't use someone else's key prefix
-const startM = await api(`/api/l/${tokenA}/upload/start`, { method: 'POST', body: { filename: 'a.pdf', size: 10 }, cookie: minhCookie });
-const forged = await api(`/api/l/${tokenA}/upload/complete`, {
+const startM = await api(`${UP(lessonA)}/start`, { method: 'POST', body: { filename: 'a.pdf', size: 10 }, cookie: minhCookie });
+const forged = await api(`${UP(lessonA)}/complete`, {
   method: 'POST', cookie: minhCookie,
   body: { key: startM.data.key.replace(minh.id, linh.id), uploadId: startM.data.uploadId, parts: [{ partNumber: 1, etag: 'x' }], filename: 'a.pdf', size: 10 },
 });
@@ -186,80 +240,86 @@ check('teacher streams video with Range', tv.status === 206 && tv.headers.get('c
 await tv.arrayBuffer();
 const rv = await api(`/api/teacher/submissions/${sub.id}`, { method: 'PATCH', body: { reviewed: true, feedback: 'Great speaking!' } });
 check('teacher marks reviewed with feedback', rv.status === 200);
-const afterReview = await api(`/api/l/${tokenA}`, { cookie: linhCookie });
-check('student sees feedback once reviewed', afterReview.data.mine.reviewed === true && afterReview.data.mine.feedback === 'Great speaking!');
+const afterReview = await api(`/api/l/${tokenA}/lessons/${lessonA}`, { cookie: linhCookie });
+check('student sees feedback once reviewed', afterReview.data.mine[0].reviewed === true && afterReview.data.mine[0].feedback === 'Great speaking!');
 const ov = await api('/api/teacher/overview');
 const ovA = ov.data.classes.find((c) => c.id === classA);
-check('overview lists the class with its next lesson link', ovA && ovA.students === 3 && ovA.nextLesson?.link.startsWith('/l/'), ovA);
+check('overview lists the class link, schedule and next lesson', ovA && ovA.students === 3 && ovA.link === cA.data.link && ovA.schedule.length === 2 && ovA.nextLesson, ovA);
 
-// ---------- close / delete ----------
+// ---------- close / auto-close ----------
 await api(`/api/teacher/lessons/${lessonA}`, { method: 'PATCH', body: { status: 'closed' } });
-const blocked = await api(`/api/l/${tokenA}/submission`, { method: 'DELETE', cookie: linhCookie });
+const fid = afterReview.data.mine[0].id;
+const blocked = await api(`/api/l/${tokenA}/lessons/${lessonA}/submissions/${fid}`, { method: 'DELETE', cookie: linhCookie });
 check('closed lesson: student cannot delete', blocked.status === 409);
-const blockedUp = await api(`/api/l/${tokenA}/upload/start`, { method: 'POST', body: { filename: 'a.pdf', size: 10 }, cookie: linhCookie });
+const blockedUp = await api(`${UP(lessonA)}/start`, { method: 'POST', body: { filename: 'a.pdf', size: 10 }, cookie: linhCookie });
 check('closed lesson: student cannot upload', blockedUp.status === 409);
-const stillView = await api(`/api/l/${tokenA}`, { cookie: linhCookie });
-check('closed lesson still readable', stillView.status === 200 && stillView.data.mine);
+const stillView = await api(`/api/l/${tokenA}/lessons/${lessonA}`, { cookie: linhCookie });
+check('closed lesson still readable, shown as closed', stillView.status === 200 && stillView.data.mine.length === 1 && stillView.data.status === 'closed');
 await api(`/api/teacher/lessons/${lessonA}`, { method: 'PATCH', body: { status: 'open' } });
-const del = await api(`/api/l/${tokenA}/submission`, { method: 'DELETE', cookie: linhCookie });
-check('student deletes own homework', del.status === 200 && (await api(`/api/l/${tokenA}`, { cookie: linhCookie })).data.mine === null);
+await api(`/api/teacher/classes/${classA}`, { method: 'PATCH', body: { autoCloseDays: 0 } });
+const auto = await api(`/api/l/${tokenA}/lessons/${lessonA}`, { cookie: linhCookie });
+check('auto-close: a lesson older than the limit counts as closed', auto.data.status === 'closed' && (await api(`/api/l/${tokenA}`, { cookie: linhCookie })).data.lessons.find((l) => l.id === lessonA).status === 'closed');
+check('auto-close: uploads refused', (await api(`${UP(lessonA)}/start`, { method: 'POST', body: { filename: 'a.pdf', size: 10 }, cookie: linhCookie })).status === 409);
+await api(`/api/teacher/classes/${classA}`, { method: 'PATCH', body: { autoCloseDays: null } });
+const del = await api(`/api/l/${tokenA}/lessons/${lessonA}/submissions/${fid}`, { method: 'DELETE', cookie: linhCookie });
+check('student deletes own homework', del.status === 200 && (await api(`/api/l/${tokenA}/lessons/${lessonA}`, { cookie: linhCookie })).data.mine.length === 0);
+check('deleting frees the file in storage', r2Exists(up2.key) === false);
 
-// ---------- roster carry-over ----------
-const L3 = await api(`/api/teacher/classes/${classA}/lessons`, { method: 'POST', body: { date: day(8), add: ['Lan V.'], remove: [minh.id] } });
-check('new lesson: roster edits apply and carry forward', L3.data.roster.map((s) => s.name).join() === 'Linh T.,An P.,Lan V.', L3.data.roster.map((s) => s.name));
-const oldRoster = await api(`/api/l/${tokenA}`);
-check('earlier lesson keeps its original roster', oldRoster.data.students.map((s) => s.name).join() === 'Linh T.,Minh A.,An P.', oldRoster.data.students.map((s) => s.name));
-const L4 = await api(`/api/teacher/classes/${classA}/lessons`, { method: 'POST', body: { date: day(15) } });
-check('next lesson inherits the edited roster', L4.data.roster.map((s) => s.name).join() === 'Linh T.,An P.,Lan V.');
+// ---------- roster changes ----------
+const minhUp = await upload(UP(lessonA), 'minh.pdf', rand(2000), { cookie: minhCookie });
+check('Minh hands in', minhUp.done?.status === 200);
+const rost = await api(`/api/teacher/classes/${classA}/roster`, { method: 'POST', body: { add: ['Lan V.'], remove: [minh.id] } });
+check('roster edit: add Lan, remove Minh', rost.status === 200 && rost.data.roster.map((s) => s.name).join() === 'Linh T.,An P.,Lan V.', rost.data.roster.map((s) => s.name));
+const newList = await api(`/api/l/${tokenA}`);
+check('link now lists the current students', newList.data.students.map((s) => s.name).join() === 'Linh T.,An P.,Lan V.');
+check('removed student can no longer use the link', (await api(`/api/l/${tokenA}`, { cookie: minhCookie })).data.me === null);
+const lanView = await api(`/api/l/${tokenA}/lessons/${lessonA}`, { cookie: linhCookie });
+check("Minh's earlier work stays visible to classmates", lanView.data.classwork.some((c) => c.studentName === 'Minh A.'));
 
 // ---------- delete lesson ----------
-check('student deletion removed the file from storage', r2Exists(up2.key) === false);
-const minhUp = await upload(`/api/l/${tokenA}/upload`, 'minh.pdf', rand(2000), { cookie: minhCookie });
-check('student removed from later lessons can still use the earlier lesson', minhUp.done?.status === 200, minhUp.done);
-const keysBefore = { mat: mat.key, sub: minhUp.key };
-check('stored before lesson delete', r2Exists(keysBefore.mat) && r2Exists(keysBefore.sub));
+check('stored before lesson delete', r2Exists(mat.key) && r2Exists(minhUp.key));
 const delLesson = await api(`/api/teacher/lessons/${lessonA}`, { method: 'DELETE' });
 check('teacher deletes lesson', delLesson.status === 200);
-check('deleted lesson link stops working', (await api(`/api/l/${tokenA}`)).status === 404);
-check('its files are gone from storage', r2Exists(keysBefore.mat) === false && r2Exists(keysBefore.sub) === false);
-
+check('deleted lesson disappears for students', (await api(`/api/l/${tokenA}/lessons/${lessonA}`, { cookie: linhCookie })).status === 404);
+check('its files are gone from storage', r2Exists(mat.key) === false && r2Exists(minhUp.key) === false);
 
 // ---------- keeping storage clean ----------
 const cC = await api('/api/teacher/classes', { method: 'POST', body: { name: 'Class C', students: ['Bo K.'] } });
 const classC = cC.data.id;
-const old = await api(`/api/teacher/classes/${classC}/lessons`, { method: 'POST', body: { date: day(-10) } });
-const oldTok = old.data.link.split('/')[2];
+const tokC = cC.data.link.split('/')[2];
+const old = await api(`/api/teacher/classes/${classC}/lessons`, { method: 'POST', body: { date: addD(today, -10) } });
 const oldMat = await upload(`/api/teacher/lessons/${old.data.id}/materials/upload`, 'Old reading.pdf', rand(5000));
-const bo = (await api(`/api/l/${oldTok}`)).data.students[0];
-const boCookie = (await api(`/api/l/${oldTok}/login`, { method: 'POST', body: { studentId: bo.id } })).cookie;
-const oldHw = await upload(`/api/l/${oldTok}/upload`, 'old-homework.mp4', rand(4000), { cookie: boCookie });
+const bo = (await api(`/api/l/${tokC}`)).data.students[0];
+const boCookie = (await api(`/api/l/${tokC}/login`, { method: 'POST', body: { studentId: bo.id } })).cookie;
+const oldHw = await upload(`/api/l/${tokC}/lessons/${old.data.id}/upload`, 'old-homework.mp4', rand(4000), { cookie: boCookie });
 check('set up an old lesson with reading and homework', oldMat.done?.status === 201 && oldHw.done?.status === 200);
 
 const st = await api('/api/teacher/storage');
 const oldRow = st.data.lessons.find((l) => l.lessonId === old.data.id);
 check('storage report shows sizes per lesson', st.status === 200 && st.data.totalBytes > 0 && oldRow.homeworkBytes === 4000 && oldRow.materialBytes === 5000 && oldRow.homeworkCount === 1, oldRow);
 
-const sched = await fetch(`${BASE}/cdn-cgi/handler/scheduled`);
-await sched.text();
+await fetch(`${BASE}/cdn-cgi/handler/scheduled`).then((r) => r.text());
 await new Promise((r) => setTimeout(r, 1500));
 const afterSweep = await api(`/api/teacher/lessons/${old.data.id}`);
 check('retention sweep removes old homework but keeps lesson and reading', afterSweep.status === 200 && afterSweep.data.submissions.length === 0 && afterSweep.data.materials.length === 1);
 check('retention sweep deleted the homework file, kept the reading', r2Exists(oldHw.key) === false && r2Exists(oldMat.key) === true);
 
-const fresh = await api(`/api/teacher/classes/${classC}/lessons`, { method: 'POST', body: { date: day(2) } });
-const freshTok = fresh.data.link.split('/')[2];
-const boCookie2 = (await api(`/api/l/${freshTok}/login`, { method: 'POST', body: { studentId: bo.id } })).cookie;
-const freshHw = await upload(`/api/l/${freshTok}/upload`, 'hw.mp4', rand(3000), { cookie: boCookie2 });
+const fresh = await api(`/api/teacher/classes/${classC}/lessons`, { method: 'POST', body: { date: today } });
+const freshHw = await upload(`/api/l/${tokC}/lessons/${fresh.data.id}/upload`, 'hw.mp4', rand(3000), { cookie: boCookie });
 await fetch(`${BASE}/cdn-cgi/handler/scheduled`).then((r) => r.text());
 await new Promise((r) => setTimeout(r, 1500));
 check('sweep leaves recent homework alone', (await api(`/api/teacher/lessons/${fresh.data.id}`)).data.submissions.length === 1);
 const cleared = await api(`/api/teacher/lessons/${fresh.data.id}/submissions`, { method: 'DELETE' });
-check('teacher clears one lesson\'s homework', cleared.status === 200 && cleared.data.filesRemoved === 1 && r2Exists(freshHw.key) === false);
+check("teacher clears one lesson's homework", cleared.status === 200 && cleared.data.filesRemoved === 1 && r2Exists(freshHw.key) === false);
 
 const wrongConfirm = await api(`/api/teacher/classes/${classC}`, { method: 'DELETE', body: { confirm: 'class c' } });
 check('deleting a class needs its exact name', wrongConfirm.status === 400);
 const delClass = await api(`/api/teacher/classes/${classC}`, { method: 'DELETE', body: { confirm: 'Class C' } });
-check('delete class removes everything', delClass.status === 200 && r2Exists(oldMat.key) === false && (await api(`/api/l/${oldTok}`)).status === 404, delClass.data);
+check('delete class removes everything', delClass.status === 200 && r2Exists(oldMat.key) === false && (await api(`/api/l/${tokC}`)).status === 404, delClass.data);
+
+// the nightly job fills in lessons for classes with a schedule
+const before = (await api(`/api/teacher/classes/${classA}`)).data.lessons.length;
+check('nightly job leaves a full schedule alone', (await api(`/api/teacher/classes/${classA}`)).data.lessons.length === before);
 
 // ---------- pages ----------
 const page = await fetch(`${BASE}/l/${tokenB}`);

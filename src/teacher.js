@@ -3,8 +3,8 @@
 import { HttpError, STUDENT_COLORS, cleanName, isDate, json, randomToken, readJson, uuid } from './util.js';
 import { abortUpload, completeUpload, deleteKeys, startUpload, streamFile, uploadPart } from './files.js';
 import { setPin } from './student.js';
+import { cleanSchedule, ensureLessons, readSchedule, todayIn, dowOf } from './classes.js';
 
-const today = () => new Date().toISOString().slice(0, 10);
 const linkFor = (token) => `/l/${token}`;
 
 async function addStudents(env, classId, names, fromDate) {
@@ -59,16 +59,17 @@ export async function handleTeacher(request, env, url, email, rest) {
   // ---- classes ----
   if (a === 'overview' && method === 'GET') {
     const classes = await env.DB.prepare(
-      `SELECT c.id, c.name,
+      `SELECT c.id, c.name, c.token, c.schedule,
         (SELECT COUNT(*) FROM students s WHERE s.class_id = c.id AND s.left_on IS NULL) AS students
        FROM classes c ORDER BY c.created_at`
     ).all();
     const out = [];
     for (const c of classes.results) {
+      await ensureLessons(env, c.id);
       const next = await env.DB.prepare(
-        `SELECT id, lesson_date, status, token FROM lessons WHERE class_id = ? AND lesson_date >= ? ORDER BY lesson_date LIMIT 1`
+        `SELECT id, lesson_date, status FROM lessons WHERE class_id = ? AND lesson_date >= ? ORDER BY lesson_date LIMIT 1`
       )
-        .bind(c.id, today())
+        .bind(c.id, todayIn(env))
         .first();
       const toReview = await env.DB.prepare(
         `SELECT COUNT(*) AS n FROM submissions sub JOIN lessons l ON l.id = sub.lesson_id WHERE l.class_id = ? AND sub.reviewed = 0`
@@ -80,7 +81,9 @@ export async function handleTeacher(request, env, url, email, rest) {
         name: c.name,
         students: c.students,
         toReview: toReview.n,
-        nextLesson: next ? { id: next.id, date: next.lesson_date, status: next.status, link: linkFor(next.token) } : null,
+        link: linkFor(c.token),
+        schedule: readSchedule(c),
+        nextLesson: next ? { id: next.id, date: next.lesson_date, status: next.status } : null,
       });
     }
     return json({ classes: out });
@@ -105,16 +108,23 @@ export async function handleTeacher(request, env, url, email, rest) {
     const body = await readJson(request);
     const name = cleanName(body.name, 40);
     const id = uuid();
-    await env.DB.prepare('INSERT INTO classes (id, name) VALUES (?, ?)').bind(id, name).run();
+    const token = randomToken(24);
+    const schedule = body.schedule === undefined ? [] : cleanSchedule(body.schedule);
+    await env.DB.prepare('INSERT INTO classes (id, name, token, schedule, multi) VALUES (?, ?, ?, ?, ?)')
+      .bind(id, name, token, JSON.stringify(schedule), body.multi ? 1 : 0)
+      .run();
     await addStudents(env, id, body.students, '2000-01-01');
-    return json({ id }, 201);
+    const first = isDate(body.startDate) ? body.startDate : undefined;
+    const made = await ensureLessons(env, id, { from: first });
+    return json({ id, link: linkFor(token), lessonsCreated: made }, 201);
   }
 
   if (a === 'classes' && b && !c && method === 'GET') {
-    const cls = await env.DB.prepare('SELECT id, name FROM classes WHERE id = ?').bind(b).first();
+    const cls = await env.DB.prepare('SELECT id, name, token, schedule, multi, auto_close_days FROM classes WHERE id = ?').bind(b).first();
     if (!cls) throw new HttpError(404, 'Class not found');
+    await ensureLessons(env, b);
     const lessons = await env.DB.prepare(
-      `SELECT l.id, l.lesson_date, l.status, l.token,
+      `SELECT l.id, l.lesson_date, l.status, l.auto,
         (SELECT COUNT(*) FROM materials m WHERE m.lesson_id = l.id) AS materials,
         (SELECT COUNT(*) FROM submissions s WHERE s.lesson_id = l.id) AS submissions,
         (SELECT COUNT(*) FROM submissions s WHERE s.lesson_id = l.id AND s.reviewed = 0) AS to_review
@@ -123,10 +133,13 @@ export async function handleTeacher(request, env, url, email, rest) {
       .bind(b)
       .all();
     return json({
-      class: cls,
+      class: {
+        id: cls.id, name: cls.name, link: linkFor(cls.token), schedule: readSchedule(cls),
+        multi: !!cls.multi, autoCloseDays: cls.auto_close_days,
+      },
       roster: await activeRoster(env, b, '9999-12-31'),
       lessons: lessons.results.map((l) => ({
-        id: l.id, date: l.lesson_date, status: l.status, link: linkFor(l.token),
+        id: l.id, date: l.lesson_date, status: l.status, auto: !!l.auto,
         materials: l.materials, submissions: l.submissions, toReview: l.to_review,
       })),
     });
@@ -135,27 +148,53 @@ export async function handleTeacher(request, env, url, email, rest) {
   // Roster edit on its own
   if (a === 'classes' && b && c === 'roster' && method === 'POST') {
     const body = await readJson(request);
-    const from = isDate(body.from) ? body.from : today();
+    const from = isDate(body.from) ? body.from : todayIn(env);
     await removeStudents(env, b, body.remove, from);
     await addStudents(env, b, body.add, from);
     return json({ roster: await activeRoster(env, b, '9999-12-31') });
   }
 
-  // Create a lesson (the builder): date, optional roster changes that carry forward
+  // Extra lesson on a date outside the weekly schedule (a replacement class, say)
   if (a === 'classes' && b && c === 'lessons' && method === 'POST') {
     const body = await readJson(request);
     if (!isDate(body.date)) throw new HttpError(400, 'Pick a day');
     const cls = await env.DB.prepare('SELECT id FROM classes WHERE id = ?').bind(b).first();
     if (!cls) throw new HttpError(404, 'Class not found');
-    await removeStudents(env, b, body.remove, body.date);
-    await addStudents(env, b, body.add, body.date);
     const id = uuid();
-    const token = randomToken(24);
     const status = body.status === 'draft' ? 'draft' : 'open';
-    await env.DB.prepare('INSERT INTO lessons (id, class_id, token, lesson_date, status) VALUES (?, ?, ?, ?, ?)')
-      .bind(id, b, token, body.date, status)
+    await env.DB.prepare('INSERT INTO lessons (id, class_id, token, lesson_date, status, auto) VALUES (?, ?, ?, ?, ?, 0)')
+      .bind(id, b, randomToken(24), body.date, status)
       .run();
-    return json({ id, link: linkFor(token), roster: await activeRoster(env, b, body.date) }, 201);
+    return json({ id, date: body.date }, 201);
+  }
+
+  // Class settings: name, weekly schedule, several files, auto-close
+  if (a === 'classes' && b && !c && method === 'PATCH') {
+    const body = await readJson(request);
+    const cls = await env.DB.prepare('SELECT id, name FROM classes WHERE id = ?').bind(b).first();
+    if (!cls) throw new HttpError(404, 'Class not found');
+    if (body.name !== undefined) await env.DB.prepare('UPDATE classes SET name = ? WHERE id = ?').bind(cleanName(body.name, 40), b).run();
+    if (body.multi !== undefined) await env.DB.prepare('UPDATE classes SET multi = ? WHERE id = ?').bind(body.multi ? 1 : 0, b).run();
+    if (body.autoCloseDays !== undefined) {
+      const n = body.autoCloseDays === null ? null : Number(body.autoCloseDays);
+      if (n !== null && (!Number.isInteger(n) || n < 0 || n > 365)) throw new HttpError(400, 'Bad number of days');
+      await env.DB.prepare('UPDATE classes SET auto_close_days = ? WHERE id = ?').bind(n, b).run();
+    }
+    if (body.schedule !== undefined) {
+      const schedule = cleanSchedule(body.schedule);
+      await env.DB.prepare('UPDATE classes SET schedule = ? WHERE id = ?').bind(JSON.stringify(schedule), b).run();
+      // Future lessons the schedule made, that are still empty and no longer on a class day, are removed.
+      const dows = new Set(schedule.map((x) => x.dow));
+      const today = todayIn(env);
+      const future = await env.DB.prepare(
+        `SELECT l.id, l.lesson_date FROM lessons l WHERE l.class_id = ? AND l.auto = 1 AND l.lesson_date >= ?
+         AND NOT EXISTS (SELECT 1 FROM materials m WHERE m.lesson_id = l.id) AND NOT EXISTS (SELECT 1 FROM submissions s WHERE s.lesson_id = l.id)`
+      ).bind(b, today).all();
+      const drop = future.results.filter((l) => !dows.has(dowOf(l.lesson_date)));
+      if (drop.length) await env.DB.batch(drop.map((l) => env.DB.prepare('DELETE FROM lessons WHERE id = ?').bind(l.id)));
+      await ensureLessons(env, b, { from: today });
+    }
+    return json({ ok: true });
   }
 
   // Storage use, per class and lesson, so Mary can see what to clear
@@ -199,6 +238,7 @@ export async function handleTeacher(request, env, url, email, rest) {
   // ---- lessons ----
   if (a === 'lessons' && b && !c && method === 'GET') {
     const l = await lessonById(env, b);
+    const clsRow = await env.DB.prepare('SELECT token FROM classes WHERE id = ?').bind(l.class_id).first();
     const mats = await env.DB.prepare('SELECT id, name, size_bytes, content_type FROM materials WHERE lesson_id = ? ORDER BY created_at').bind(b).all();
     const subs = await env.DB.prepare(
       `SELECT sub.*, st.name AS student_name FROM submissions sub JOIN students st ON st.id = sub.student_id
@@ -209,7 +249,7 @@ export async function handleTeacher(request, env, url, email, rest) {
     const roster = await activeRoster(env, l.class_id, l.lesson_date);
     const handed = new Set(subs.results.map((s) => s.student_id));
     return json({
-      lesson: { id: l.id, classId: l.class_id, date: l.lesson_date, status: l.status, link: linkFor(l.token) },
+      lesson: { id: l.id, classId: l.class_id, date: l.lesson_date, status: l.status, link: linkFor(clsRow.token) },
       materials: mats.results.map((m) => ({ id: m.id, name: m.name, size: m.size_bytes, contentType: m.content_type })),
       submissions: subs.results.map((s) => ({
         id: s.id, studentId: s.student_id, studentName: s.student_name, name: s.name, size: s.size_bytes,

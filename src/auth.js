@@ -89,38 +89,33 @@ export async function requireTeacher(request, env) {
 const SESSION_COOKIE = 'tm_s';
 const SESSION_DAYS = 30;
 
-export async function createStudentSession(env, studentId, lessonId, url) {
+export async function createStudentSession(env, studentId, classId, url) {
   const token = randomToken(32);
   const hash = await sha256hex(token);
   const expires = new Date(Date.now() + SESSION_DAYS * 86400 * 1000).toISOString();
   await env.DB.prepare(
-    'INSERT INTO student_sessions (token_hash, student_id, lesson_id, expires_at) VALUES (?, ?, ?, ?)'
+    'INSERT INTO student_sessions (token_hash, student_id, class_id, expires_at) VALUES (?, ?, ?, ?)'
   )
-    .bind(hash, studentId, lessonId, expires)
+    .bind(hash, studentId, classId, expires)
     .run();
   const secure = url.protocol === 'https:' ? '; Secure' : '';
   return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_DAYS * 86400}${secure}`;
 }
 
-// Returns { studentId } for a valid session on this lesson, else null.
-export async function getStudentSession(request, env, lessonId) {
+// Returns { studentId } for a valid session on this class, else null.
+// The student must still be in the class today.
+export async function getStudentSession(request, env, classId, today) {
   const token = parseCookies(request.headers.get('cookie'))[SESSION_COOKIE];
   if (!token) return null;
   const hash = await sha256hex(token);
   const row = await env.DB.prepare(
-    'SELECT student_id, lesson_id, expires_at FROM student_sessions WHERE token_hash = ?'
+    `SELECT ss.student_id, ss.expires_at FROM student_sessions ss JOIN students s ON s.id = ss.student_id
+     WHERE ss.token_hash = ? AND ss.class_id = ? AND s.class_id = ? AND s.added_on <= ? AND (s.left_on IS NULL OR s.left_on > ?)`
   )
-    .bind(hash)
+    .bind(hash, classId, classId, today, today)
     .first();
   if (!row || row.expires_at < new Date().toISOString()) return null;
-  // A session is tied to one student, who may only use lessons of their own class.
-  const ok = await env.DB.prepare(
-    `SELECT 1 AS ok FROM lessons l JOIN students s ON s.class_id = l.class_id
-     WHERE l.id = ? AND s.id = ? AND s.added_on <= l.lesson_date AND (s.left_on IS NULL OR s.left_on > l.lesson_date)`
-  )
-    .bind(lessonId, row.student_id)
-    .first();
-  return ok ? { studentId: row.student_id, tokenHash: hash } : null;
+  return { studentId: row.student_id, tokenHash: hash };
 }
 
 export function clearSessionCookie(url) {
