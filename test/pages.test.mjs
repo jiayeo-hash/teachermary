@@ -267,6 +267,22 @@ if (process.argv[1].endsWith('pages.test.mjs')) {
   check('class page: feedback saved', after.data.submissions[0].feedback === 'Great voice!', after.data.submissions[0]);
 
   // prepare tab
+  // ---- scores: teacher fills in, parent sees own ----
+  const sp = await openPage(`/teacher/class/?id=${classId}&lesson=${lessonId}&tab=scores`);
+  check('scores tab: rows for the roster', await until(() => !!sp.w.document.querySelector('[data-score="Minh A."]')), sp.text() + sp.errors.join(';'));
+  const minhCard = () => sp.w.document.querySelector('[data-score="Minh A."]');
+  click(sp.w, minhCard().querySelector('[data-col=participation][data-val="4"]'));
+  click(sp.w, minhCard().querySelector('[data-col=homework][data-val="Yes"]'));
+  await sleep(500);
+  const sv = (await tapi(`/api/teacher/lessons/${lessonId}/scores`)).data.rows.find((r) => r.name === 'Minh A.');
+  check('scores tab: taps are saved', sv.participation === 4 && sv.homework === true, sv);
+  click(sp.w, sp.w.document.getElementById('shareScores'));
+  await sleep(500);
+  check('scores tab: sharing is saved', (await tapi(`/api/teacher/lessons/${lessonId}/scores`)).data.shared === true);
+  click(s.w, s.w.document.querySelector('#myscores button'));
+  check('student: My scores shows own marks', await until(() => /Participation/.test(s.text()) && /Homework/.test(s.text()) && !!s.w.document.querySelector('[data-score]')), s.text());
+  check('student: scores page has no other names', !/Linh T\./.test(s.w.document.getElementById('myscores').textContent));
+
   const pp = await openPage(`/teacher/class/?id=${classId}&lesson=${lessonId}`);
   await until(() => !!pp.w.document.getElementById('lessonpanel'));
   check('class page: prepare shows reading and the class link', /Reading 12\.pdf/.test(pp.text()) && pp.text().includes('/l/' + token), pp.text());

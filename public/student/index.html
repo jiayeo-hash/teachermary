@@ -145,6 +145,22 @@
 
 <sc-if value="{{noLessons}}"><div style="background: #FFFFFF; border: 2px solid #EBDDBD; border-radius: 28px; padding: 18px; color: #5B5F85; font-size: 16px">{{t.noLessons}}</div></sc-if>
 
+<sc-if value="{{showScoresCard}}"><section id="myscores" style="background: #FFFFFF; border: 2px solid #EBDDBD; border-radius: 28px; overflow: hidden">
+<button onClick="{{toggleScores}}" aria-expanded="{{scoresOpen}}" style="width: 100%; min-height: 64px; border: 0; background: #E0F5E9; padding: 12px 18px; display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; text-align: left; color: #23284A; font-family: 'Fredoka', 'Nunito', sans-serif; font-weight: 600; font-size: 20px"><span>{{t.myScores}}</span><span>{{scoresChev}}</span></button>
+<sc-if value="{{scoresOpen}}"><div style="padding: 14px 18px 18px; display: flex; flex-direction: column; gap: 14px">
+<sc-if value="{{scoresNeedPin}}"><div id="scoresneedpin" style="color: #5B5F85; font-size: 16px">{{t.scoresNeedPin}}</div></sc-if>
+<sc-if value="{{scoresEmpty}}"><div style="color: #5B5F85; font-size: 16px">{{t.scoresEmpty}}</div></sc-if>
+<sc-for list="{{scoreRows}}" as="r">
+<div data-score="{{r.date}}" style="border: 2px solid #EBDDBD; border-radius: 20px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px">
+<b style="font-family: 'Fredoka', 'Nunito', sans-serif; font-size: 18px">{{r.label}}</b>
+<sc-for list="{{r.items}}" as="i"><div style="display: flex; justify-content: space-between; gap: 10px; font-size: 16px"><span>{{i.name}}</span><b style="color: #1B8350">{{i.value}}</b></div></sc-for>
+<sc-if value="{{r.comment}}"><div style="background: #FFF6D6; border-radius: 14px; padding: 8px 12px; font-size: 16px">{{r.comment}}</div></sc-if>
+</div>
+</sc-for>
+<sc-if value="{{scoresShowLegend}}"><div style="color: #5B5F85; font-size: 14px">{{t.scoreLegend}}</div></sc-if>
+</div></sc-if>
+</section></sc-if>
+
 <sc-for list="{{lessons}}" as="l" hint-placeholder-count="3">
 <section data-lesson="{{l.id}}" style="background: #FFFFFF; border: 2px solid #EBDDBD; border-radius: 28px; overflow: hidden">
 <button onClick="{{l.toggle}}" aria-expanded="{{l.expanded}}" style="width: 100%; min-height: 72px; border: 0; background: {{l.headBg}}; padding: 12px 18px; display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; text-align: left; color: #23284A">
@@ -294,7 +310,7 @@ class Component extends DCLogic {
     this.token = location.pathname.split('/')[2] || '';
     const saved = TM.store('lang');
     const guess = (navigator.language || 'en').toLowerCase().indexOf('vi') === 0 ? 'vi' : 'en';
-    this.setState({ phase: 'loading', lang: saved === 'vi' || saved === 'en' ? saved : guess, open: {}, detail: {}, changing: {}, upErr: {}, shown: 6, confirm: null, up: null });
+    this.setState({ phase: 'loading', lang: saved === 'vi' || saved === 'en' ? saved : guess, open: {}, detail: {}, changing: {}, upErr: {}, shown: 6, confirm: null, up: null, scores: null, scoresOpen: false });
     this.load();
   }
   base() { return '/api/l/' + encodeURIComponent(this.token); }
@@ -308,10 +324,13 @@ class Component extends DCLogic {
     try {
       const d = await TM.api(this.base());
       this.setState({ phase: 'ready', data: d, pinFor: null, pinErr: '' });
-      if (d.me) { const id = this.curId(d); if (id) this.openLesson(id); }
+      if (d.me) { const id = this.curId(d); if (id) this.openLesson(id); this.loadScores(); }
     } catch (e) {
       this.setState({ phase: e.status === 404 ? 'notfound' : 'error' });
     }
+  }
+  async loadScores() {
+    try { this.setState({ scores: await TM.api(this.base() + '/scores') }); } catch (e) { this.setState({ scores: { needsPin: false, scores: [] } }); }
   }
   async openLesson(id) {
     this.setState({ open: Object.assign({}, this.state.open, { [id]: true }) });
@@ -351,6 +370,9 @@ class Component extends DCLogic {
       classWork: "Our class's work", noClasswork: 'No one has handed in yet.', lessonNote: 'Only friends in this class can see these lessons.',
       closedText: "This lesson is finished, so you cannot add new work here. You can still download the reading and look at your class's work.",
       noLessons: 'No lessons yet. Check back soon!', showOlder: 'Show older lessons',
+      myScores: 'My scores', scoresNeedPin: 'To see your scores, ask your teacher to set a PIN for you, then pick your name again and type it.', scoresEmpty: 'No scores to show yet.',
+      scoreLegend: '5 Excellent · 4 Very good · 3 Good · 2 Satisfactory · 1 Needs improvement',
+      sPart: 'Participation', sBeh: 'Behavior', sHw: 'Homework', sAct: 'Class activity (speaking)', sUnd: 'Understanding', yes: 'Yes', no: 'No',
       today: 'Today', next: 'Next lesson', closedTag: 'Closed',
       sent: (n) => n + (n === 1 ? ' file handed in' : ' files handed in'),
       tooMany: (n) => 'You can hand in up to ' + n + ' files. Delete one to add another.'
@@ -369,6 +391,9 @@ class Component extends DCLogic {
       classWork: 'Bài của cả lớp', noClasswork: 'Chưa có bạn nào nộp bài.', lessonNote: 'Chỉ các bạn trong lớp này mới xem được các buổi học.',
       closedText: 'Buổi học này đã kết thúc, nên bạn không thể nộp thêm bài ở đây. Bạn vẫn có thể tải bài đọc và xem bài của các bạn trong lớp.',
       noLessons: 'Chưa có buổi học nào. Bạn quay lại sau nhé!', showOlder: 'Xem các buổi học cũ hơn',
+      myScores: 'Điểm của bạn', scoresNeedPin: 'Để xem điểm, bạn nhờ cô giáo đặt mã PIN cho bạn, rồi chọn lại tên và nhập mã nhé.', scoresEmpty: 'Chưa có điểm nào.',
+      scoreLegend: '5 Xuất sắc · 4 Rất tốt · 3 Tốt · 2 Đạt yêu cầu · 1 Cần cải thiện',
+      sPart: 'Tham gia', sBeh: 'Thái độ', sHw: 'Bài tập về nhà', sAct: 'Hoạt động trên lớp (nói)', sUnd: 'Mức độ hiểu bài', yes: 'Có', no: 'Không',
       today: 'Hôm nay', next: 'Buổi tiếp theo', closedTag: 'Đã đóng',
       sent: (n) => 'Đã nộp ' + n + ' tệp',
       tooMany: (n) => 'Bạn chỉ nộp được tối đa ' + n + ' tệp. Hãy xóa một tệp để thêm tệp khác.'
@@ -452,7 +477,18 @@ class Component extends DCLogic {
         noClasswork: !!x && x.classwork.length === 0
       };
     });
+    const sc = st.scores;
+    const fmt = (n) => (n === null || n === undefined ? '–' : String(n));
+    const scoreRows = sc && !sc.needsPin ? sc.scores.map((r) => ({
+      date: r.date, label: TM.dateLabel(r.date, lang), comment: r.comment || '',
+      items: [[T.sPart, fmt(r.participation)], [T.sBeh, fmt(r.behavior)], [T.sHw, r.homework === null ? '–' : r.homework ? T.yes : T.no], [T.sAct, fmt(r.activity)], [T.sUnd, fmt(r.understanding)]].map((x) => ({ name: x[0], value: x[1] })),
+    })) : [];
+    const scoresOpen = !!st.scoresOpen;
     return {
+      showScoresCard: isLesson && !!sc, scoresOpen, scoresChev: scoresOpen ? '▲' : '▼',
+      toggleScores: () => { this.setState({ scoresOpen: !scoresOpen }); if (!scoresOpen) this.loadScores(); },
+      scoresNeedPin: scoresOpen && !!sc && sc.needsPin, scoresEmpty: scoresOpen && !!sc && !sc.needsPin && scoreRows.length === 0,
+      scoresShowLegend: scoreRows.length > 0, scoreRows,
       t: Object.assign({}, T, { className: d.className || '', welcomeAria: T.welcome + ' ' + (d.className || ''), pickSub: vi ? 'Chạm vào tên của bạn để mở các buổi học.' : 'Tap your name to open your lessons.' }),
       langEn: { bg: !vi ? '#FFC93C' : 'transparent', fg: !vi ? '#23284A' : '#FFFFFF' },
       langVi: { bg: vi ? '#FFC93C' : 'transparent', fg: vi ? '#23284A' : '#FFFFFF' },
@@ -481,7 +517,7 @@ class Component extends DCLogic {
     const vi = this.state.lang === 'vi';
     try {
       await TM.api(this.base() + '/login', { method: 'POST', body: { studentId: s.id, pin: pin || undefined } });
-      this.setState({ pinFor: null, pinErr: '', open: {}, detail: {}, shown: 6 });
+      this.setState({ pinFor: null, pinErr: '', open: {}, detail: {}, shown: 6, scores: null, scoresOpen: false });
       await this.load();
     } catch (e) {
       if (!s.hasPin && e.status !== 429) { this.setState({ phase: 'error' }); return; }
@@ -490,7 +526,7 @@ class Component extends DCLogic {
   }
   async logout() {
     try { await TM.api(this.base() + '/logout', { method: 'POST' }); } catch (e) {}
-    this.setState({ pinFor: null, open: {}, detail: {}, confirm: null });
+    this.setState({ pinFor: null, open: {}, detail: {}, confirm: null, scores: null, scoresOpen: false });
     await this.load();
   }
   async sendFiles(id, files) {

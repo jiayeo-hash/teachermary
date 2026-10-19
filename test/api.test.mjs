@@ -142,10 +142,40 @@ check('5 wrong PINs lock the student out (even the right PIN)', afterLock.status
 await api(`/api/teacher/students/${linh.id}/pin`, { method: 'PUT', body: { pin: '4821' } });
 const good = await api(`/api/l/${tokenA}/login`, { method: 'POST', body: { studentId: linh.id, pin: '4821' } });
 check('right PIN signs in and sets HttpOnly cookie', good.status === 200 && good.res.headers.get('set-cookie').includes('HttpOnly'), good.data);
-const linhCookie = good.cookie;
+let linhCookie = good.cookie;
 const minhLogin = await api(`/api/l/${tokenA}/login`, { method: 'POST', body: { studentId: minh.id } });
 check('student without PIN signs in by name', minhLogin.status === 200);
 const minhCookie = minhLogin.cookie;
+
+// ---- scores ----
+const sBase = `/api/teacher/lessons/${lessonA}/scores`;
+const sg0 = await api(sBase);
+check('scores list has the roster', sg0.status === 200 && sg0.data.rows.length === 3 && sg0.data.shared === false, sg0.data);
+check('score out of range rejected', (await api(`${sBase}/${linh.id}`, { method: 'PUT', body: { participation: 6 } })).status === 400);
+check('score must be whole', (await api(`${sBase}/${linh.id}`, { method: 'PUT', body: { behavior: 3.5 } })).status === 400);
+check('homework must be yes/no', (await api(`${sBase}/${linh.id}`, { method: 'PUT', body: { homework: 'maybe' } })).status === 400);
+check('unknown student rejected', (await api(`${sBase}/nope`, { method: 'PUT', body: { behavior: 3 } })).status === 404);
+check('Linh scored', (await api(`${sBase}/${linh.id}`, { method: 'PUT', body: { participation: 5, behavior: 4, homework: true, activity: 3, understanding: 5, comment: 'Great reading today' } })).status === 200);
+check('Minh scored', (await api(`${sBase}/${minh.id}`, { method: 'PUT', body: { participation: 2, homework: false } })).status === 200);
+check('partial update keeps other fields', (await api(`${sBase}/${linh.id}`, { method: 'PUT', body: { behavior: 5 } })).status === 200 && (await api(sBase)).data.rows.find((r) => r.studentId === linh.id).participation === 5);
+check('score can be cleared (N/A)', (await api(`${sBase}/${linh.id}`, { method: 'PUT', body: { activity: null } })).status === 200 && (await api(sBase)).data.rows.find((r) => r.studentId === linh.id).activity === null);
+const hidden = await api(`/api/l/${tokenA}/scores`, { cookie: linhCookie });
+check('scores hidden until shared', hidden.status === 200 && hidden.data.scores.length === 0, hidden.data);
+check('share scores', (await api(`/api/teacher/lessons/${lessonA}`, { method: 'PATCH', body: { scoresShared: true } })).status === 200);
+const mine = await api(`/api/l/${tokenA}/scores`, { cookie: linhCookie });
+check('PIN student sees own shared scores only', mine.data.scores.length === 1 && mine.data.scores[0].participation === 5 && mine.data.scores[0].behavior === 5 && mine.data.scores[0].homework === true && mine.data.scores[0].comment === 'Great reading today', mine.data);
+check('no classmates in the payload', !JSON.stringify(mine.data).includes('Minh'));
+const noPin = await api(`/api/l/${tokenA}/scores`, { cookie: minhCookie });
+check('student without PIN cannot see scores', noPin.data.needsPin === true && noPin.data.scores.length === 0, noPin.data);
+check('scores need sign-in', (await api(`/api/l/${tokenA}/scores`)).status === 401);
+check('unsharing hides again', (await api(`/api/teacher/lessons/${lessonA}`, { method: 'PATCH', body: { scoresShared: false } })).status === 200 && (await api(`/api/l/${tokenA}/scores`, { cookie: linhCookie })).data.scores.length === 0);
+await api(`/api/teacher/lessons/${lessonA}`, { method: 'PATCH', body: { scoresShared: true } });
+await api(`/api/teacher/students/${linh.id}/pin`, { method: 'PUT', body: { pin: '4821' } });
+check('changing PIN signs out old sessions', (await api(`/api/l/${tokenA}/scores`, { cookie: linhCookie })).status === 401);
+const relog = await api(`/api/l/${tokenA}/login`, { method: 'POST', body: { studentId: linh.id, pin: '4821' } });
+check('can sign in again after PIN change', relog.status === 200);
+linhCookie = relog.cookie;
+
 
 const info1 = await api(`/api/l/${tokenA}`, { cookie: linhCookie });
 const ids1 = info1.data.lessons?.map((l) => l.id) || [];
@@ -333,6 +363,7 @@ check('nightly job leaves a full schedule alone', (await api(`/api/teacher/class
 const page = await fetch(`${BASE}/l/${tokenB}`);
 check('/l/<token> serves the student page with noindex', page.status === 200 && page.headers.get('x-robots-tag').includes('noindex'));
 check('unknown api route 404', (await api('/api/nope')).status === 404);
+
 
 console.log(failures === 0 ? '\nALL API CHECKS PASSED' : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);

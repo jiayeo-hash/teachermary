@@ -12,7 +12,7 @@
   TMT.header('Class');
   var app = document.getElementById('app');
   var classId = TMT.qs('id');
-  var S = { cls: null, tab: TMT.qs('tab') === 'review' ? 'review' : 'prepare', lessonId: TMT.qs('lesson'), detail: null, viewing: null, addDraft: '', busy: '' };
+  var S = { cls: null, tab: ['review','scores'].indexOf(TMT.qs('tab')) >= 0 ? TMT.qs('tab') : 'prepare', lessonId: TMT.qs('lesson'), detail: null, viewing: null, addDraft: '', busy: '' };
 
   function reloadClass() {
     return TM.api('/api/teacher/classes/' + classId).then(function (c) {
@@ -28,6 +28,7 @@
     });
   }
   function loadDetail() {
+    if (S.tab === 'scores') { loadScores(); }
     if (!S.lessonId) { S.detail = null; draw(); return Promise.resolve(); }
     return TM.api('/api/teacher/lessons/' + S.lessonId).then(function (d) { S.detail = d; draw(); });
   }
@@ -57,8 +58,9 @@
     app.appendChild(h('div', { class: 'tabs' }, [
       h('button', { class: 'tab' + (S.tab === 'prepare' ? ' on' : ''), id: 'tab-prepare', onclick: function () { S.tab = 'prepare'; draw(); } }, 'Prepare'),
       h('button', { class: 'tab' + (S.tab === 'review' ? ' on' : ''), id: 'tab-review', onclick: function () { S.tab = 'review'; draw(); } }, 'Review'),
+      h('button', { class: 'tab' + (S.tab === 'scores' ? ' on' : ''), id: 'tab-scores', onclick: function () { S.tab = 'scores'; loadScores(); } }, 'Scores'),
     ]));
-    if (S.tab === 'prepare') drawPrepare(); else drawReview();
+    if (S.tab === 'prepare') drawPrepare(); else if (S.tab === 'scores') drawScores(); else drawReview();
   }
 
   var DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -293,6 +295,56 @@
     else if (ct === 'application/pdf') node = h('iframe', { src: url, title: sub.name });
     else node = h('div', { style: 'padding:20px;color:#fff' }, 'This file type cannot be shown here. Use Download.');
     return h('div', { class: 'viewer', id: 'viewer' }, node);
+  }
+
+  var LABELS = { 5: 'Excellent', 4: 'Very good', 3: 'Good', 2: 'Satisfactory', 1: 'Needs improvement' };
+  var COLS = [['participation', 'Participation'], ['behavior', 'Behavior'], ['homework', 'Homework'], ['activity', 'Class activity (speaking)'], ['understanding', 'Understanding']];
+  function loadScores() {
+    S.scores = null; draw();
+    if (!S.lessonId) return;
+    var id = S.lessonId;
+    TM.api('/api/teacher/lessons/' + id + '/scores').then(function (r) { if (id === S.lessonId) { S.scores = r; draw(); } }).catch(TMT.fail);
+  }
+  function saveScore(row, patch) {
+    for (var k in patch) row[k] = patch[k];
+    TM.api('/api/teacher/lessons/' + S.lessonId + '/scores/' + row.studentId, { method: 'PUT', body: patch }).catch(function (e) { TMT.fail(e); loadScores(); });
+  }
+  function drawScores() {
+    var sc = S.scores;
+    var box = h('section', { class: 'card flat', id: 'scores' }, [h('div', { class: 'row' }, [h('h2', { style: 'font-size:22px' }, 'Scores'),
+      h('select', { id: 'lessonpick', onchange: function (e) { S.lessonId = e.target.value; loadScores(); } },
+        S.cls.lessons.slice().reverse().map(function (l) { return h('option', { value: l.id, selected: l.id === S.lessonId }, TMT.dl(l.date)); }))])]);
+    app.appendChild(box);
+    if (!S.lessonId) { box.appendChild(h('span', { class: 'muted' }, 'No lessons yet.')); return; }
+    if (!sc) { box.appendChild(h('span', { class: 'muted' }, 'Loading…')); return; }
+    box.appendChild(h('span', { class: 'muted' }, '5 Excellent · 4 Very good · 3 Good · 2 Satisfactory · 1 Needs improvement. Saved as you tap. Tap a chosen score again to clear it (N/A).'));
+    if (!sc.rows.length) box.appendChild(h('span', { class: 'muted' }, 'No students in the class on this date.'));
+    sc.rows.forEach(function (row) {
+      var card = h('div', { class: 'card flat', 'data-score': row.name, style: 'border-radius:18px' });
+      card.appendChild(h('div', { class: 'row between' }, [h('b', {}, row.name), h('span', { class: 'muted' }, row.handedIn ? 'Homework handed in' : 'No homework uploaded')]));
+      COLS.forEach(function (col) {
+        var key = col[0];
+        var line = h('div', { class: 'row', style: 'gap:6px;flex-wrap:wrap' }, [h('span', { style: 'min-width:170px' }, col[1])]);
+        var opts = key === 'homework' ? [['Yes', true], ['No', false]] : [5, 4, 3, 2, 1].map(function (n) { return [String(n), n]; });
+        opts.forEach(function (o) {
+          var on = row[key] === o[1];
+          line.appendChild(h('button', { class: 'btn small ' + (on ? 'green' : 'ghost'), 'data-col': key, 'data-val': o[0], title: LABELS[o[1]] || '',
+            onclick: function () { var patch = {}; patch[key] = on ? null : o[1]; saveScore(row, patch); draw(); } }, o[0]));
+        });
+        card.appendChild(line);
+      });
+      var cm = h('textarea', { placeholder: 'Comment for ' + row.name + ' (optional)', value: row.comment || '', 'data-col': 'comment', maxlength: 500 });
+      cm.addEventListener('change', function () { saveScore(row, { comment: cm.value }); TMT.toast('Saved'); });
+      card.appendChild(cm);
+      box.appendChild(card);
+    });
+    var share = h('input', { type: 'checkbox', id: 'shareScores', checked: sc.shared ? true : null });
+    share.addEventListener('change', function () {
+      TM.api('/api/teacher/lessons/' + S.lessonId, { method: 'PATCH', body: { scoresShared: share.checked } })
+        .then(function () { sc.shared = share.checked; TMT.toast(share.checked ? 'Parents can now see these scores' : 'Scores hidden from parents'); }).catch(TMT.fail);
+    });
+    box.appendChild(h('label', { class: 'row', style: 'gap:6px' }, [share, 'Show these scores to parents']));
+    box.appendChild(h('span', { class: 'muted' }, 'Parents only see their own child, and only students who have a PIN can open scores. Set PINs under Prepare → Students.'));
   }
 
   function drawReview() {

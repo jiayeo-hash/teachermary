@@ -50,6 +50,8 @@ async function hashPin(pin, salt) {
 }
 
 export async function setPin(env, studentId, pin) {
+  // Changing or clearing a PIN signs the student out everywhere, so an old sign-in cannot reach private scores.
+  await env.DB.prepare('DELETE FROM student_sessions WHERE student_id = ?').bind(studentId).run();
   if (pin === null || pin === '') {
     await env.DB.prepare('UPDATE students SET pin_hash = NULL, pin_fails = 0, locked_until = NULL WHERE id = ?').bind(studentId).run();
     return;
@@ -95,7 +97,7 @@ export async function handleStudent(request, env, url, token, rest) {
     const sess = await getStudentSession(request, env, cls.id, today);
     const me = sess && out.students.find((s) => s.id === sess.studentId);
     if (me) {
-      out.me = { id: me.id, name: me.name };
+      out.me = { id: me.id, name: me.name, hasPin: me.hasPin };
       const rows = await env.DB.prepare(
         `SELECT l.id, l.lesson_date, l.status,
            (SELECT COUNT(*) FROM materials m WHERE m.lesson_id = l.id) AS materials,
@@ -150,6 +152,28 @@ export async function handleStudent(request, env, url, token, rest) {
 
   // From here on a signed-in student is required.
   const sess = await requireStudent(request, env, cls, today);
+
+  // GET /api/l/:token/scores -> this student's shared scores. Private: needs a PIN-protected name.
+  if (rest[0] === 'scores' && rest.length === 1 && method === 'GET') {
+    const me = await env.DB.prepare('SELECT pin_hash FROM students WHERE id = ?').bind(sess.studentId).first();
+    if (!me || !me.pin_hash) return json({ needsPin: true, scores: [] });
+    const rows = await env.DB.prepare(
+      `SELECT l.id AS lesson_id, l.lesson_date, sc.participation, sc.behavior, sc.homework, sc.activity, sc.understanding, sc.comment
+       FROM lesson_scores sc JOIN lessons l ON l.id = sc.lesson_id
+       WHERE sc.student_id = ? AND l.class_id = ? AND l.scores_shared = 1
+         AND (sc.participation IS NOT NULL OR sc.behavior IS NOT NULL OR sc.homework IS NOT NULL OR sc.activity IS NOT NULL OR sc.understanding IS NOT NULL OR (sc.comment IS NOT NULL AND sc.comment != ''))
+       ORDER BY l.lesson_date DESC`
+    )
+      .bind(sess.studentId, cls.id)
+      .all();
+    return json({
+      needsPin: false,
+      scores: rows.results.map((r) => ({
+        lessonId: r.lesson_id, date: r.lesson_date, participation: r.participation, behavior: r.behavior,
+        homework: r.homework === null ? null : !!r.homework, activity: r.activity, understanding: r.understanding, comment: r.comment || '',
+      })),
+    });
+  }
 
   // GET /api/l/:token/lessons/:id  -> reading, my files, classmates' files
   if (rest[0] === 'lessons' && rest[1] && rest.length === 2 && method === 'GET') {

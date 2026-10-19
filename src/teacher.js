@@ -249,7 +249,7 @@ export async function handleTeacher(request, env, url, email, rest) {
     const roster = await activeRoster(env, l.class_id, l.lesson_date);
     const handed = new Set(subs.results.map((s) => s.student_id));
     return json({
-      lesson: { id: l.id, classId: l.class_id, date: l.lesson_date, status: l.status, link: linkFor(clsRow.token) },
+      lesson: { id: l.id, classId: l.class_id, date: l.lesson_date, status: l.status, scoresShared: !!l.scores_shared, link: linkFor(clsRow.token) },
       materials: mats.results.map((m) => ({ id: m.id, name: m.name, size: m.size_bytes, contentType: m.content_type })),
       submissions: subs.results.map((s) => ({
         id: s.id, studentId: s.student_id, studentName: s.student_name, name: s.name, size: s.size_bytes,
@@ -269,6 +269,7 @@ export async function handleTeacher(request, env, url, email, rest) {
     if (!isDate(date)) throw new HttpError(400, 'Bad date');
     if (!['draft', 'open', 'closed'].includes(status)) throw new HttpError(400, 'Bad status');
     await env.DB.prepare('UPDATE lessons SET lesson_date = ?, status = ? WHERE id = ?').bind(date, status, b).run();
+    if (body.scoresShared !== undefined) await env.DB.prepare('UPDATE lessons SET scores_shared = ? WHERE id = ?').bind(body.scoresShared ? 1 : 0, b).run();
     return json({ ok: true });
   }
 
@@ -290,6 +291,60 @@ export async function handleTeacher(request, env, url, email, rest) {
     await env.DB.prepare('DELETE FROM submissions WHERE lesson_id = ?').bind(b).run();
     await deleteKeys(env, keys);
     return json({ ok: true, filesRemoved: keys.length });
+  }
+
+  // ---- scores (the class report card Mary fills in during a lesson) ----
+  if (a === 'lessons' && b && c === 'scores' && !d && method === 'GET') {
+    const l = await lessonById(env, b);
+    const roster = await activeRoster(env, l.class_id, l.lesson_date);
+    const rows = (await env.DB.prepare('SELECT * FROM lesson_scores WHERE lesson_id = ?').bind(b).all()).results;
+    const handed = new Set((await env.DB.prepare('SELECT DISTINCT student_id FROM submissions WHERE lesson_id = ?').bind(b).all()).results.map((r) => r.student_id));
+    const byStudent = new Map(rows.map((r) => [r.student_id, r]));
+    // include students who left but already have a score for this lesson
+    const extra = rows.filter((r) => !roster.some((s) => s.id === r.student_id));
+    const names = extra.length
+      ? (await env.DB.prepare(`SELECT id, name FROM students WHERE id IN (${extra.map(() => '?').join(',')})`).bind(...extra.map((r) => r.student_id)).all()).results
+      : [];
+    const all = [...roster.map((s) => ({ id: s.id, name: s.name })), ...names];
+    return json({
+      shared: !!l.scores_shared,
+      date: l.lesson_date,
+      rows: all.map((s) => {
+        const r = byStudent.get(s.id) || {};
+        return {
+          studentId: s.id, name: s.name, handedIn: handed.has(s.id),
+          participation: r.participation ?? null, behavior: r.behavior ?? null,
+          homework: r.homework === undefined || r.homework === null ? null : !!r.homework,
+          activity: r.activity ?? null, understanding: r.understanding ?? null, comment: r.comment || '',
+        };
+      }),
+    });
+  }
+
+  if (a === 'lessons' && b && c === 'scores' && d && method === 'PUT') {
+    const l = await lessonById(env, b);
+    const st = await env.DB.prepare('SELECT id FROM students WHERE id = ? AND class_id = ?').bind(d, l.class_id).first();
+    if (!st) throw new HttpError(404, 'Student not found');
+    const body = await readJson(request);
+    const sets = [];
+    const vals = [];
+    for (const f of ['participation', 'behavior', 'activity', 'understanding']) {
+      if (body[f] === undefined) continue;
+      const v = body[f] === null ? null : Number(body[f]);
+      if (v !== null && (!Number.isInteger(v) || v < 1 || v > 5)) throw new HttpError(400, 'Scores are 1 to 5');
+      sets.push(f); vals.push(v);
+    }
+    if (body.homework !== undefined) {
+      if (body.homework !== null && typeof body.homework !== 'boolean') throw new HttpError(400, 'Homework is yes or no');
+      sets.push('homework'); vals.push(body.homework === null ? null : body.homework ? 1 : 0);
+    }
+    if (body.comment !== undefined) {
+      sets.push('comment'); vals.push(String(body.comment ?? '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').slice(0, 500));
+    }
+    if (!sets.length) throw new HttpError(400, 'Nothing to save');
+    await env.DB.prepare('INSERT OR IGNORE INTO lesson_scores (lesson_id, student_id) VALUES (?, ?)').bind(b, d).run();
+    await env.DB.prepare(`UPDATE lesson_scores SET ${sets.map((f) => `${f} = ?`).join(', ')}, updated_at = datetime('now') WHERE lesson_id = ? AND student_id = ?`).bind(...vals, b, d).run();
+    return json({ ok: true });
   }
 
   // Materials upload for a lesson
