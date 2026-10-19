@@ -16,6 +16,8 @@ const TYPES = {
   pdf: 'application/pdf',
   doc: 'application/msword',
   docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  ppt: 'application/vnd.ms-powerpoint',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   jpg: 'image/jpeg',
   jpeg: 'image/jpeg',
   png: 'image/png',
@@ -28,7 +30,7 @@ const INLINE = new Set(['video/mp4', 'video/quicktime', 'video/webm', 'applicati
 export function checkUpload(filename, size) {
   const name = String(filename || '').replace(/[\\/\u0000-\u001f]/g, '_').trim().slice(0, 120);
   const ext = name.includes('.') ? name.split('.').pop().toLowerCase() : '';
-  if (!name || !TYPES[ext]) throw new HttpError(415, 'That file type is not allowed. Use a video, PDF, Word file, photo or audio.');
+  if (!name || !TYPES[ext]) throw new HttpError(415, 'That file type is not allowed. Use a video, PDF, Word or PowerPoint file, photo or audio.');
   if (!Number.isFinite(size) || size <= 0) throw new HttpError(400, 'Empty file');
   if (size > MAX_BYTES) throw new HttpError(413, 'File is too big (limit 1 GB)');
   return { name, ext, contentType: TYPES[ext] };

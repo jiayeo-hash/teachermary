@@ -139,7 +139,7 @@
   function lessonPanel(d) {
     var L = d.lesson;
     var dateInput = h('input', { type: 'date', id: 'newdate', value: L.date });
-    var fileIn = h('input', { type: 'file', id: 'addfile', multiple: true, accept: '.pdf,.doc,.docx,.mp4,.m4v,.mov,.webm,.jpg,.jpeg,.png,.heic,.mp3,.m4a', onchange: function (e) {
+    var fileIn = h('input', { type: 'file', id: 'addfile', multiple: true, accept: '.pdf,.doc,.docx,.ppt,.pptx,.mp4,.m4v,.mov,.webm,.jpg,.jpeg,.png,.heic,.mp3,.m4a', onchange: function (e) {
       var files = [].slice.call(e.target.files); e.target.value = '';
       var chain = Promise.resolve();
       files.forEach(function (f, i) {

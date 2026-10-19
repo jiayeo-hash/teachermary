@@ -228,13 +228,13 @@
 <sc-if value="{{l.multi}}">
 <label style="min-height: 54px; padding: 0 30px; border-radius: 18px; background: #1B8350; color: #FFFFFF; font-family: 'Fredoka', 'Nunito', sans-serif; font-weight: 600; font-size: 19px; cursor: pointer; box-shadow: 0 4px 0 #11603A; display: flex; align-items: center">
 {{t.choose}}
-<input type="file" multiple onChange="{{l.onFile}}" accept="video/*,audio/*,image/*,.pdf,.doc,.docx" style="position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden">
+<input type="file" multiple onChange="{{l.onFile}}" accept="video/*,audio/*,image/*,.pdf,.doc,.docx,.ppt,.pptx" style="position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden">
 </label>
 </sc-if>
 <sc-if value="{{l.single}}">
 <label style="min-height: 54px; padding: 0 30px; border-radius: 18px; background: #1B8350; color: #FFFFFF; font-family: 'Fredoka', 'Nunito', sans-serif; font-weight: 600; font-size: 19px; cursor: pointer; box-shadow: 0 4px 0 #11603A; display: flex; align-items: center">
 {{t.choose}}
-<input type="file" onChange="{{l.onFile}}" accept="video/*,audio/*,image/*,.pdf,.doc,.docx" style="position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden">
+<input type="file" onChange="{{l.onFile}}" accept="video/*,audio/*,image/*,.pdf,.doc,.docx,.ppt,.pptx" style="position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden">
 </label>
 </sc-if>
 <sc-if value="{{l.changing}}"><button onClick="{{l.keepOld}}" style="min-height: 46px; padding: 0 16px; border: 0; background: transparent; color: #2F6FED; font-family: 'Nunito', sans-serif; font-weight: 700; font-size: 15px; cursor: pointer">{{t.keepOld}}</button></sc-if>
@@ -344,7 +344,7 @@ class Component extends DCLogic {
       pickNote: 'Only friends in this class see this page.', pinLabel: 'Type your secret number', open: 'Open', notYou: 'Not you?',
       handingAs: 'Handing in as', reading: 'Reading time', noReading: 'No reading for this lesson yet.', download: 'Download',
       showWork: 'Show us your work', addTitle: 'Add your video or file', addMore: 'Add another file',
-      addNote: 'A video, a PDF or a Word file. It flies straight to your teacher, so it does not fill up your phone.',
+      addNote: 'A video, a PDF, a Word or PowerPoint file. It flies straight to your teacher, so it does not fill up your phone.',
       choose: 'Choose file', keepOld: 'Keep my old file', sending: 'Sending', keepOpen: 'Please keep this page open',
       handedIn: 'Great job! Handed in', change: 'Change file', del: 'Delete', untilClose: 'You can change or delete it until this lesson closes.',
       yesDel: 'Yes, delete it', noKeep: 'No, keep it', feedbackFrom: 'Message from your teacher',
@@ -362,7 +362,7 @@ class Component extends DCLogic {
       pickNote: 'Chỉ các bạn trong lớp này mới thấy trang này.', pinLabel: 'Nhập số bí mật của bạn', open: 'Mở', notYou: 'Không phải bạn?',
       handingAs: 'Đang nộp bài với tên', reading: 'Giờ đọc', noReading: 'Buổi này chưa có bài đọc.', download: 'Tải về',
       showWork: 'Cho cô xem bài của bạn', addTitle: 'Thêm video hoặc tệp của bạn', addMore: 'Thêm một tệp nữa',
-      addNote: 'Video, PDF hoặc tệp Word. Bài sẽ bay thẳng đến cô giáo, nên không làm đầy điện thoại của bạn.',
+      addNote: 'Video, PDF, tệp Word hoặc PowerPoint. Bài sẽ bay thẳng đến cô giáo, nên không làm đầy điện thoại của bạn.',
       choose: 'Chọn tệp', keepOld: 'Giữ tệp cũ', sending: 'Đang gửi', keepOpen: 'Bạn giữ trang này mở nhé',
       handedIn: 'Giỏi lắm! Đã nộp bài', change: 'Đổi tệp', del: 'Xóa', untilClose: 'Bạn có thể đổi hoặc xóa tệp cho đến khi buổi học này đóng.',
       yesDel: 'Có, xóa đi', noKeep: 'Không, giữ lại', feedbackFrom: 'Lời nhắn từ cô giáo',

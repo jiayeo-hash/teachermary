@@ -107,6 +107,8 @@ const mat = await upload(`/api/teacher/lessons/${lessonA}/materials/upload`, 'Re
 check('teacher uploads 17 MB reading in 3 chunks', mat.done?.status === 201, mat.done || mat);
 const bad = await upload(`/api/teacher/lessons/${lessonA}/materials/upload`, 'evil.html', rand(100));
 check('html upload is refused', bad.start?.status === 415, bad.start?.data);
+const ppt = await upload(`/api/teacher/lessons/${draft.data.id}/materials/upload`, 'Slides.pptx', rand(3000));
+check('PowerPoint (.pptx) upload is accepted', ppt.done?.status === 201, ppt.done || ppt.start);
 const bigLie = await api(`/api/teacher/lessons/${lessonA}/materials/upload/start`, { method: 'POST', body: { filename: 'a.mp4', size: 5 * 1024 ** 3 } });
 check('over 1 GB refused', bigLie.status === 413);
 
