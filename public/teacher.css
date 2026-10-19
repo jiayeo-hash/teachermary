@@ -39,7 +39,6 @@ textarea{width:100%;min-height:80px}
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#23284A;color:#fff;border-radius:14px;padding:12px 18px;font-weight:700;z-index:9}
 .toast.err{background:#B3261E}
 .viewer{background:#111;border-radius:16px;overflow:hidden}
-.viewer video,.viewer iframe,.viewer img{display:block;width:100%;max-height:70vh;border:0}
+.viewer video,.viewer iframe{display:block;width:100%;max-height:70vh;border:0}
 .viewer iframe{height:70vh;background:#fff}
-.viewer img{object-fit:contain}
 .star{color:#D9A400}

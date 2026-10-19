@@ -223,13 +223,73 @@
     ]));
   }
 
+  // Photo viewer: rotate, zoom (buttons, wheel, pinch) and drag to move, so sideways or small photos can be read here.
+  function imageViewer(url, name) {
+    var st = { rot: 0, zoom: 1, x: 0, y: 0 };
+    var img = h('img', { src: url, alt: name, draggable: 'false', style: 'position:absolute;left:50%;top:50%;max-width:none;user-select:none;-webkit-user-drag:none;transform-origin:center center' });
+    var stage = h('div', { id: 'imgstage', style: 'position:relative;height:70vh;overflow:hidden;touch-action:none;cursor:grab;background:#111' }, img);
+    var label = h('span', { class: 'muted', style: 'color:#ddd', id: 'imgzoom' }, '');
+    function fit() {
+      var w = img.naturalWidth || 1, hh = img.naturalHeight || 1;
+      var sideways = st.rot % 180 !== 0;
+      var iw = sideways ? hh : w, ih = sideways ? w : hh;
+      return Math.min(stage.clientWidth / iw, stage.clientHeight / ih, 1) || 1;
+    }
+    function apply() {
+      var k = fit() * st.zoom;
+      img.style.width = (img.naturalWidth || 0) + 'px';
+      img.style.height = (img.naturalHeight || 0) + 'px';
+      img.style.marginLeft = -((img.naturalWidth || 0) / 2) + 'px';
+      img.style.marginTop = -((img.naturalHeight || 0) / 2) + 'px';
+      img.style.transform = 'translate(' + st.x + 'px,' + st.y + 'px) rotate(' + st.rot + 'deg) scale(' + k + ')';
+      img.setAttribute('data-rot', st.rot);
+      img.setAttribute('data-zoom', st.zoom.toFixed(2));
+      label.textContent = Math.round(st.zoom * 100) + '%';
+    }
+    function zoomBy(f) { st.zoom = Math.max(0.5, Math.min(8, st.zoom * f)); if (st.zoom <= 1) { st.x = 0; st.y = 0; } apply(); }
+    function reset() { st = { rot: 0, zoom: 1, x: 0, y: 0 }; apply(); }
+    function rotate(d) { st.rot = (st.rot + d + 360) % 360; st.x = 0; st.y = 0; apply(); }
+    img.addEventListener('load', apply);
+    window.addEventListener('resize', apply);
+    stage.addEventListener('wheel', function (e) { e.preventDefault(); zoomBy(e.deltaY < 0 ? 1.15 : 1 / 1.15); }, { passive: false });
+    var pts = {}, lastDist = 0;
+    stage.addEventListener('pointerdown', function (e) { pts[e.pointerId] = { x: e.clientX, y: e.clientY }; try { stage.setPointerCapture(e.pointerId); } catch (x) {} stage.style.cursor = 'grabbing'; });
+    stage.addEventListener('pointermove', function (e) {
+      var p = pts[e.pointerId]; if (!p) return;
+      var ids = Object.keys(pts);
+      if (ids.length === 2) {
+        pts[e.pointerId] = { x: e.clientX, y: e.clientY };
+        var a = pts[ids[0]], b = pts[ids[1]];
+        var d = Math.hypot(a.x - b.x, a.y - b.y);
+        if (lastDist) zoomBy(d / lastDist);
+        lastDist = d;
+        return;
+      }
+      st.x += e.clientX - p.x; st.y += e.clientY - p.y;
+      pts[e.pointerId] = { x: e.clientX, y: e.clientY };
+      apply();
+    });
+    function up(e) { delete pts[e.pointerId]; lastDist = 0; stage.style.cursor = 'grab'; }
+    stage.addEventListener('pointerup', up); stage.addEventListener('pointercancel', up);
+    function b(act, text, title, fn) { return h('button', { class: 'btn small', type: 'button', 'data-act': act, title: title, 'aria-label': title, onclick: fn }, text); }
+    var bar = h('div', { class: 'row', style: 'padding:8px 10px;background:#222;gap:8px' }, [
+      b('rot-left', '⟲ Rotate', 'Rotate left', function () { rotate(-90); }),
+      b('rot-right', 'Rotate ⟳', 'Rotate right', function () { rotate(90); }),
+      b('zoom-out', '−', 'Zoom out', function () { zoomBy(1 / 1.25); }),
+      b('zoom-in', '+', 'Zoom in', function () { zoomBy(1.25); }),
+      b('fit', 'Reset', 'Reset view', reset),
+      label,
+    ]);
+    return h('div', { class: 'viewer', id: 'viewer' }, [bar, stage]);
+  }
+
   function viewer(sub) {
     var url = '/api/teacher/submissions/' + sub.id + '/file';
     var ct = sub.contentType || '';
     var node;
     if (ct.indexOf('video/') === 0) node = h('video', { controls: true, preload: 'metadata', playsinline: true, src: url });
     else if (ct.indexOf('audio/') === 0) node = h('audio', { controls: true, src: url, style: 'width:100%' });
-    else if (ct.indexOf('image/') === 0 && ct !== 'image/heic') node = h('img', { src: url, alt: sub.name });
+    else if (ct.indexOf('image/') === 0 && ct !== 'image/heic') return imageViewer(url, sub.name);
     else if (ct === 'application/pdf') node = h('iframe', { src: url, title: sub.name });
     else node = h('div', { style: 'padding:20px;color:#fff' }, 'This file type cannot be shown here. Use Download.');
     return h('div', { class: 'viewer', id: 'viewer' }, node);

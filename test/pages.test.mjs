@@ -173,6 +173,9 @@ if (process.argv[1].endsWith('pages.test.mjs')) {
   click(sm.w, btn(mcard(), 'Yes, delete it'));
   check('student: delete just one of several', await until(() => !mcard().querySelector('[data-file="p2.pdf"]') && !!mcard().querySelector('[data-file="p1.mp4"]')));
 
+  fire(sm.w, mcard().querySelector('input[type=file]'), [mkfile(sm.w, 'photo.png', 'image/png', 800)]);
+  await until(() => !!mcard().querySelector('[data-file="photo.png"]'), 6000);
+
   // teacher reviews, student sees feedback; classmates see work
   const detail = await tapi(`/api/teacher/lessons/${lessonId}`);
   const sub = detail.data.submissions[0];
@@ -238,8 +241,24 @@ if (process.argv[1].endsWith('pages.test.mjs')) {
   const cp = await openPage(`/teacher/class/?id=${classId}&lesson=${lessonId}&tab=review`);
   check('class page: review shows Linh homework', await until(() => /Linh T\./.test(cp.text()) && /p1\.mp4/.test(cp.text())), cp.text() + cp.errors.join(';'));
   check('class page: not-handed-in list', /Not handed in yet/.test(cp.text()));
-  click(cp.w, cp.w.document.querySelector('[data-act=watch]'));
+  click(cp.w, [...cp.w.document.querySelectorAll('[data-sub]')].find((c) => c.textContent.includes('p1.mp4')).querySelector('[data-act=watch]'));
   check('class page: video player appears', await until(() => !!cp.w.document.querySelector('#viewer video')));
+  // photo: rotate and zoom controls
+  const photoEl = () => [...cp.w.document.querySelectorAll('[data-sub]')].find((c) => c.textContent.includes('photo.png'));
+  click(cp.w, photoEl().querySelector('[data-act=watch]'));
+  check('class page: photo opens in a viewer with rotate and zoom', await until(() => !!photoEl().querySelector('#viewer img') && !!photoEl().querySelector('[data-act=rot-right]')));
+  const pimg = () => photoEl().querySelector('#viewer img');
+  const photoCard = { querySelector: (q) => photoEl().querySelector(q) };
+  click(cp.w, photoCard.querySelector('[data-act=rot-right]'));
+  check('photo: rotate right turns it 90 degrees', pimg().getAttribute('data-rot') === '90');
+  click(cp.w, photoCard.querySelector('[data-act=rot-left]')); click(cp.w, photoCard.querySelector('[data-act=rot-left]'));
+  check('photo: rotate left twice goes to 270', pimg().getAttribute('data-rot') === '270');
+  click(cp.w, photoCard.querySelector('[data-act=zoom-in]'));
+  check('photo: zoom in enlarges it', Number(pimg().getAttribute('data-zoom')) > 1);
+  click(cp.w, photoCard.querySelector('[data-act=zoom-out]')); click(cp.w, photoCard.querySelector('[data-act=zoom-out]'));
+  check('photo: zoom out can go below 100%', Number(pimg().getAttribute('data-zoom')) < 1);
+  click(cp.w, photoCard.querySelector('[data-act=fit]'));
+  check('photo: reset returns to normal', pimg().getAttribute('data-rot') === '0' && Number(pimg().getAttribute('data-zoom')) === 1);
   const fb = cp.w.document.querySelector('textarea');
   fb.value = 'Great voice!';
   click(cp.w, cp.w.document.querySelector('[data-act=save]'));
