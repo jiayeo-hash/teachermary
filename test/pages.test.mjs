@@ -96,14 +96,14 @@ if (process.argv[1].endsWith('pages.test.mjs')) {
   check('student: bad link shows not found', await until(() => /Link not found/.test(bad.text())), bad.text());
 
   const s = await openPage('/l/' + token);
-  check('student: picker shows names', await until(() => /Who is handing in/.test(s.text()) && /Linh T\./.test(s.text())), s.text() + s.errors.join(';'));
+  check('student: picker shows names', await until(() => /Who are you/.test(s.text()) && /Linh T\./.test(s.text())), s.text() + s.errors.join(';'));
   check('student: no script errors', realErrs(s.errors).length === 0, s.errors.join(';'));
   check('student: picker hides reading until name chosen', !/Reading 12/.test(s.text()));
 
   click(s.w, btn(s.w, 'Tiếng Việt'));
-  check('student: Vietnamese works', await until(() => /Ai đang nộp bài/.test(s.text())));
+  check('student: Vietnamese works', await until(() => /Bạn là ai/.test(s.text())));
   click(s.w, btn(s.w, 'English'));
-  await until(() => /Who is handing in/.test(s.text()));
+  await until(() => /Who are you/.test(s.text()));
 
   click(s.w, btn(s.w, 'MA'));
   check('student: PIN step appears', await until(() => !!s.w.document.getElementById('pin')));
@@ -159,7 +159,7 @@ if (process.argv[1].endsWith('pages.test.mjs')) {
   // Mary switches on several files
   await tapi(`/api/teacher/classes/${classId}`, { method: 'PATCH', body: { multi: true } });
   const sm = await openPage('/l/' + token);
-  await until(() => /Who is handing in/.test(sm.text()));
+  await until(() => /Who are you/.test(sm.text()));
   click(sm.w, btn(sm.w, 'LT'));
   await until(() => /Reading 12\.pdf/.test(sm.text()));
   const mcard = () => sm.w.document.querySelector(`[data-lesson="${lessonId}"]`);
@@ -181,7 +181,7 @@ if (process.argv[1].endsWith('pages.test.mjs')) {
   const sub = detail.data.submissions[0];
   await tapi(`/api/teacher/submissions/${sub.id}`, { method: 'PATCH', body: { reviewed: true, feedback: 'Lovely reading!' } });
   const s2 = await openPage('/l/' + token);
-  await until(() => /Who is handing in/.test(s2.text()));
+  await until(() => /Who are you/.test(s2.text()));
   click(s2.w, btn(s2.w, 'MA'));
   await until(() => !!s2.w.document.getElementById('pin'));
   s2.w.document.getElementById('pin').value = '1234';
@@ -189,14 +189,14 @@ if (process.argv[1].endsWith('pages.test.mjs')) {
   await until(() => /Reading time/.test(s2.text()));
   check('student: classmate sees Linh T. work', await until(() => /Linh T\./.test(s2.text()) && /Our class's work/.test(s2.text())), s2.text());
   click(sm.w, btn(sm.w, 'Not you?'));
-  await until(() => /Who is handing in/.test(sm.text()));
+  await until(() => /Who are you/.test(sm.text()));
   click(sm.w, btn(sm.w, 'LT'));
   check('student: feedback shown', await until(() => /Lovely reading!/.test(sm.text())), sm.text());
 
   // closed lesson hides upload
   await tapi(`/api/teacher/lessons/${lessonId}`, { method: 'PATCH', body: { status: 'closed' } });
   const s3 = await openPage('/l/' + token);
-  await until(() => /Who is handing in/.test(s3.text()));
+  await until(() => /Who are you/.test(s3.text()));
   click(s3.w, btn(s3.w, 'LT'));
   check('student: closed lesson shows note, no upload', await until(() => /lesson is finished/.test(s3.text())) && !/Add your video or file/.test(s3.text()), s3.text());
   await tapi(`/api/teacher/lessons/${lessonId}`, { method: 'PATCH', body: { status: 'open' } });
