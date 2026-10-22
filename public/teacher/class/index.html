@@ -12,7 +12,7 @@
   TMT.header('Class');
   var app = document.getElementById('app');
   var classId = TMT.qs('id');
-  var S = { cls: null, tab: ['review','scores'].indexOf(TMT.qs('tab')) >= 0 ? TMT.qs('tab') : 'prepare', lessonId: TMT.qs('lesson'), detail: null, viewing: null, addDraft: '', busy: '' };
+  var S = { cls: null, tab: ['review','scores'].indexOf(TMT.qs('tab')) >= 0 ? TMT.qs('tab') : 'prepare', lessonId: TMT.qs('lesson'), detail: null, viewing: {}, addDraft: '', busy: '' };
 
   function reloadClass() {
     return TM.api('/api/teacher/classes/' + classId).then(function (c) {
@@ -36,7 +36,7 @@
     return p.then(function (r) { if (okMsg) TMT.toast(okMsg); return after ? after(r) : reloadClass(); }).catch(TMT.fail);
   }
   function lessonPicker() {
-    var sel = h('select', { id: 'lessonpick', onchange: function (e) { S.lessonId = e.target.value; S.viewing = null; loadDetail(); } },
+    var sel = h('select', { id: 'lessonpick', onchange: function (e) { S.lessonId = e.target.value; S.viewing = {}; loadDetail(); } },
       S.cls.lessons.slice().reverse().map(function (l) {
         return h('option', { value: l.id, selected: l.id === S.lessonId }, TMT.dl(l.date) + (l.toReview ? ' · ' + l.toReview + ' to review' : ''));
       }));
@@ -352,15 +352,34 @@
     if (!d) { app.appendChild(h('div', { class: 'card flat' }, h('span', { class: 'muted' }, 'No lessons yet.'))); return; }
     var box = h('section', { class: 'card flat' }, [h('div', { class: 'row' }, [h('h2', { style: 'font-size:22px' }, 'Homework'), lessonPicker()])]);
     if (!d.submissions.length) box.appendChild(h('span', { class: 'muted' }, 'Nothing handed in for this lesson yet.'));
+    // group by student so one tap can open all of that student's files
+    var groups = [], byName = {};
     d.submissions.forEach(function (sub) {
+      if (!byName[sub.studentName]) { byName[sub.studentName] = []; groups.push(byName[sub.studentName]); }
+      byName[sub.studentName].push(sub);
+    });
+    groups.forEach(function (list) {
+      if (list.length > 1) {
+        var allOpen = list.every(function (x) { return S.viewing[x.id]; });
+        box.appendChild(h('div', { class: 'row between', 'data-student': list[0].studentName }, [
+          h('b', { style: 'font-size:18px' }, list[0].studentName + ' · ' + list.length + ' files'),
+          h('button', { class: 'btn small sun', 'data-act': 'watch-all', onclick: function () {
+            list.forEach(function (x) { if (allOpen) delete S.viewing[x.id]; else S.viewing[x.id] = true; });
+            draw();
+          } }, allOpen ? 'Hide all' : 'Watch / read all'),
+        ]));
+      }
+      list.forEach(function (sub) { drawSub(sub); });
+    });
+    function drawSub(sub) {
       var fb = h('textarea', { id: 'fb-' + sub.id, placeholder: 'Message for ' + sub.studentName + ' (they will see it)', value: sub.feedback || '' });
       var chk = h('input', { type: 'checkbox', id: 'rv-' + sub.id, checked: sub.reviewed ? true : null });
-      var open = S.viewing === sub.id;
+      var open = !!S.viewing[sub.id];
       box.appendChild(h('div', { class: 'card flat', 'data-sub': sub.studentName, style: 'border-radius:18px' }, [
         h('div', { class: 'row between' }, [
           h('span', {}, [h('b', {}, sub.studentName), ' · ' + sub.name + ' · ' + TM.fmtSize(sub.size) + ' · ' + TM.ago(sub.uploadedAt, 'en') + (sub.replacedAt ? ' (changed)' : '')]),
           h('span', { class: 'row' }, [
-            h('button', { class: 'btn small', 'data-act': 'watch', onclick: function () { S.viewing = open ? null : sub.id; draw(); } }, open ? 'Hide' : 'Watch / read'),
+            h('button', { class: 'btn small', 'data-act': 'watch', onclick: function () { if (open) delete S.viewing[sub.id]; else S.viewing[sub.id] = true; draw(); } }, open ? 'Hide' : 'Watch / read'),
             h('a', { class: 'btn small ghost', href: '/api/teacher/submissions/' + sub.id + '/file?download=1' }, 'Download'),
           ]),
         ]),
@@ -375,7 +394,7 @@
           } }, 'Save'),
         ]),
       ]));
-    });
+    }
     if (d.notHandedIn.length) box.appendChild(h('span', { class: 'muted', id: 'nothanded' }, 'Not handed in yet: ' + d.notHandedIn.join(', ')));
     app.appendChild(box);
   }

@@ -243,6 +243,14 @@ if (process.argv[1].endsWith('pages.test.mjs')) {
   check('class page: not-handed-in list', /Not handed in yet/.test(cp.text()));
   click(cp.w, [...cp.w.document.querySelectorAll('[data-sub]')].find((c) => c.textContent.includes('p1.mp4')).querySelector('[data-act=watch]'));
   check('class page: video player appears', await until(() => !!cp.w.document.querySelector('#viewer video')));
+  const wa = cp.w.document.querySelector('[data-act=watch-all]');
+  check('class page: student with several files has a Watch all button', !!wa && /files/.test(cp.text()), cp.text());
+  if (wa) {
+    click(cp.w, wa);
+    check('class page: Watch all opens every file of that student', await until(() => cp.w.document.querySelectorAll('#viewer').length >= 2), cp.w.document.querySelectorAll('#viewer').length);
+    click(cp.w, cp.w.document.querySelector('[data-act=watch-all]'));
+    check('class page: Hide all closes them', await until(() => cp.w.document.querySelectorAll('#viewer').length === 0));
+  }
   // photo: rotate and zoom controls
   const photoEl = () => [...cp.w.document.querySelectorAll('[data-sub]')].find((c) => c.textContent.includes('photo.png'));
   click(cp.w, photoEl().querySelector('[data-act=watch]'));
