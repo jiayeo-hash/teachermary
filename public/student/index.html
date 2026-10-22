@@ -559,10 +559,14 @@ class Component extends DCLogic {
     const list = files.slice(0, room);
     const setErr = (m) => this.setState({ upErr: Object.assign({}, this.state.upErr, { [id]: m }) });
     setErr('');
+    const n = list.length;
+    const tag = (i) => (n > 1 ? '(' + (i + 1) + '/' + n + ') ' : '');
+    let i = -1;
     for (const file of list) {
-      this.setState({ up: { id, name: file.name, pct: 0 } });
+      i++;
+      this.setState({ up: { id, name: tag(i) + file.name, pct: 0 } });
       try {
-        await TM.upload(this.base() + '/lessons/' + encodeURIComponent(id) + '/upload', file, (p) => this.setState({ up: { id, name: file.name, pct: Math.round(p * 100) } }));
+        await TM.upload(this.base() + '/lessons/' + encodeURIComponent(id) + '/upload', file, (p) => this.setState({ up: { id, name: tag(i) + file.name, pct: Math.round(p * 100) } }));
       } catch (e) {
         this.setState({ up: null });
         setErr(e && e.status ? e.message : (vi ? 'Không gửi được tệp. Bạn thử lại nhé.' : 'Could not send the file. Please try again.'));
@@ -572,6 +576,9 @@ class Component extends DCLogic {
     }
     this.setState({ up: null, changing: Object.assign({}, this.state.changing, { [id]: false }) });
     await this.refresh(id);
+    if (d.multi && files.length > list.length) {
+      setErr(vi ? 'Mỗi buổi học tối đa ' + (d.maxFiles || 10) + ' tệp, nên ' + (files.length - list.length) + ' tệp chưa được gửi.' : 'The limit is ' + (d.maxFiles || 10) + ' files per lesson, so ' + (files.length - list.length) + ' file(s) were not sent.');
+    }
   }
 }
 </script>
