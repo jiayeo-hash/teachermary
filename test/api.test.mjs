@@ -365,5 +365,22 @@ check('/l/<token> serves the student page with noindex', page.status === 200 && 
 check('unknown api route 404', (await api('/api/nope')).status === 404);
 
 
+
+// ---- teacher deletes one homework file ----
+const dlLesson = await api(`/api/teacher/classes/${classA}/lessons`, { method: 'POST', body: { date: today } });
+const dlId = dlLesson.data?.id || (await api(`/api/teacher/classes/${classA}`)).data.lessons.find((l) => l.date === today)?.id;
+const hwUp = await upload(`/api/l/${tokenA}/lessons/${dlId}/upload`, 'hamster.png', rand(2000), { cookie: linhCookie });
+check('uploaded a file to delete', hwUp.done?.status === 200, hwUp.done || hwUp);
+const hwDl0 = await api(`/api/teacher/lessons/${dlId}`);
+const hwVictim = hwDl0.data.submissions[0];
+if (hwVictim) {
+  const del = await api(`/api/teacher/submissions/${hwVictim.id}`, { method: 'DELETE' });
+  check('teacher can delete one homework file', del.status === 200, del.data);
+  check('deleted file is gone from storage', r2Exists(hwUp.key) === false);
+  const after = await api(`/api/teacher/lessons/${dlId}`);
+  check('deleted file is gone from the lesson', !after.data.submissions.some((x) => x.id === hwVictim.id));
+  check('deleting twice is 404', (await api(`/api/teacher/submissions/${hwVictim.id}`, { method: 'DELETE' })).status === 404);
+} else check('had a submission to delete', false, hwDl0.data);
+
 console.log(failures === 0 ? '\nALL API CHECKS PASSED' : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);

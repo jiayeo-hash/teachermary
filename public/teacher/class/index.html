@@ -347,6 +347,8 @@
     box.appendChild(h('span', { class: 'muted' }, 'Parents only see their own child, and only students who have a PIN can open scores. Set PINs under Prepare → Students.'));
   }
 
+  function loadAfterDelete() { return reloadClass(); }
+
   function drawReview() {
     var c = S.cls, d = S.detail;
     if (!d) { app.appendChild(h('div', { class: 'card flat' }, h('span', { class: 'muted' }, 'No lessons yet.'))); return; }
@@ -381,6 +383,12 @@
           h('span', { class: 'row' }, [
             h('button', { class: 'btn small', 'data-act': 'watch', onclick: function () { if (open) delete S.viewing[sub.id]; else S.viewing[sub.id] = true; draw(); } }, open ? 'Hide' : 'Watch / read'),
             h('a', { class: 'btn small ghost', href: '/api/teacher/submissions/' + sub.id + '/file?download=1' }, 'Download'),
+            h('button', { class: 'btn small danger', 'data-act': 'delete', onclick: function () {
+              if (confirm('Delete ' + sub.name + ' from ' + sub.studentName + '? This cannot be undone and the student will no longer see it.')) {
+                delete S.viewing[sub.id];
+                act(TM.api('/api/teacher/submissions/' + sub.id, { method: 'DELETE' }), 'Deleted', loadAfterDelete);
+              }
+            } }, 'Delete'),
           ]),
         ]),
         open ? viewer(sub) : null,

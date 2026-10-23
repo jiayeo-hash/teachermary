@@ -251,6 +251,14 @@ if (process.argv[1].endsWith('pages.test.mjs')) {
     click(cp.w, cp.w.document.querySelector('[data-act=watch-all]'));
     check('class page: Hide all closes them', await until(() => cp.w.document.querySelectorAll('#viewer').length === 0));
   }
+  {
+    const before = (await tapi('/api/teacher/lessons/' + lessonId)).data.submissions.length;
+    const card = [...cp.w.document.querySelectorAll('[data-sub]')].find((c) => c.textContent.includes('p1.mp4'));
+    click(cp.w, card.querySelector('[data-act=delete]'));
+    await sleep(800);
+    const afterSubs = (await tapi('/api/teacher/lessons/' + lessonId)).data.submissions;
+    check('class page: Delete removes one file after confirming', afterSubs.length === before - 1 && !afterSubs.some((x) => x.name === 'p1.mp4'), afterSubs.map((x) => x.name));
+  }
   // photo: rotate and zoom controls
   const photoEl = () => [...cp.w.document.querySelectorAll('[data-sub]')].find((c) => c.textContent.includes('photo.png'));
   click(cp.w, photoEl().querySelector('[data-act=watch]'));

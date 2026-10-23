@@ -392,6 +392,15 @@ export async function handleTeacher(request, env, url, email, rest) {
     return streamFile(env, request, s.r2_key, { name: s.name, contentType: s.content_type, download: url.searchParams.has('download') });
   }
 
+  // Delete one homework file (e.g. something that should not have been uploaded)
+  if (a === 'submissions' && b && !c && method === 'DELETE') {
+    const sub = await env.DB.prepare('SELECT id, r2_key FROM submissions WHERE id = ?').bind(b).first();
+    if (!sub) throw new HttpError(404, 'File not found');
+    await env.DB.prepare('DELETE FROM submissions WHERE id = ?').bind(b).run();
+    await deleteKeys(env, [sub.r2_key]);
+    return json({ ok: true });
+  }
+
   if (a === 'submissions' && b && !c && method === 'PATCH') {
     const body = await readJson(request);
     const sub = await env.DB.prepare('SELECT id FROM submissions WHERE id = ?').bind(b).first();
